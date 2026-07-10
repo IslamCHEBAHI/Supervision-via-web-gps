@@ -1,0 +1,65 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSupervisor() {
+      return request.auth != null
+        && request.auth.token.email in [
+          "superviseur@medicalbiotop.com"
+        ];
+    }
+
+    function isAuthenticatedMobile() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow get: if isSupervisor() || isAuthenticatedMobile();
+      allow list: if isSupervisor();
+      allow create, delete: if isSupervisor();
+      allow update: if isSupervisor()
+        || (
+          isAuthenticatedMobile()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              "isConnected",
+              "lastConnectionAt",
+              "lastSeenAt",
+              "updatedAt"
+            ])
+        );
+
+      match /locations/{locationId} {
+        allow read: if isSupervisor() || isAuthenticatedMobile();
+
+        // L'app mobile doit etre connectee a Firebase Auth, meme en anonyme.
+        allow create, update: if isAuthenticatedMobile();
+        allow delete: if isSupervisor();
+      }
+
+      match /pinned_places/{placeId} {
+        allow read: if isSupervisor() || isAuthenticatedMobile();
+
+        // Points manuels ajoutes par l'app mobile: dentiste, client, cabinet, etc.
+        allow create, update: if isAuthenticatedMobile();
+        allow delete: if isSupervisor();
+      }
+
+      match /daily_reports/{reportId} {
+        allow read: if isSupervisor() || isAuthenticatedMobile();
+        allow create, update: if isAuthenticatedMobile();
+        allow delete: if isSupervisor() || isAuthenticatedMobile();
+      }
+    }
+
+    match /daily_reports/{reportId} {
+      allow read: if isSupervisor();
+      allow create, update: if isAuthenticatedMobile();
+      allow delete: if isSupervisor() || isAuthenticatedMobile();
+    }
+
+    match /tracking_latest/{userId} {
+      allow read, write: if isSupervisor();
+    }
+  }
+}
