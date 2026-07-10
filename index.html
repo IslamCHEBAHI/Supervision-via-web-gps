@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Medical BioTop Supervisor Web</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="login-view" class="login-view">
+        <div class="login-layout">
+          <section class="login-brand" aria-label="Medical BioTop">
+            <img src="medical-biotop-logo.png" alt="Medical BioTop" class="login-logo" />
+            <div>
+              <p class="eyebrow">Medical BioTop</p>
+              <h1>Supervisor Web</h1>
+              <p class="login-copy">Plateforme de supervision GPS et gestion des utilisateurs terrain.</p>
+            </div>
+          </section>
+
+          <section class="login-panel" aria-label="Connexion superviseur">
+            <div class="login-card-header">
+              <img src="medical-biotop-logo.png" alt="Medical BioTop" class="login-card-logo" />
+              <div>
+                <p class="eyebrow">Acces securise</p>
+                <h2>Connexion superviseur</h2>
+              </div>
+            </div>
+            <form id="login-form" class="form-stack">
+              <label>
+                Email superviseur
+                <input id="admin-email" type="email" autocomplete="email" required />
+              </label>
+              <label>
+                Password
+                <input id="admin-password" type="password" autocomplete="current-password" required />
+              </label>
+              <button type="submit">Login</button>
+              <p id="login-error" class="error-text" role="alert"></p>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section id="dashboard-view" class="dashboard-view hidden">
+        <aside class="sidebar">
+          <div class="sidebar-brand">
+            <img src="medical-biotop-logo.png" alt="Medical BioTop" class="sidebar-logo" />
+            <div>
+              <p class="eyebrow">Medical BioTop</p>
+              <h2>Supervisor</h2>
+            </div>
+          </div>
+          <nav class="nav-list" aria-label="Supervisor sections">
+            <button class="nav-button active" data-view="overview">Dashboard</button>
+            <button class="nav-button" data-view="users">Users list</button>
+            <button class="nav-button" data-view="map">GPS location</button>
+            <button class="nav-button" data-view="clients">Clients pointes</button>
+            <button class="nav-button" data-view="reports">Rapports journaliers</button>
+          </nav>
+          <button id="logout-button" class="ghost-button">Logout</button>
+        </aside>
+
+        <section class="content">
+          <header class="topbar">
+            <div>
+              <h1 id="page-title">Dashboard</h1>
+              <p id="page-subtitle">Supervision des utilisateurs et positions GPS.</p>
+            </div>
+            <button id="refresh-users" class="secondary-button">Refresh</button>
+          </header>
+
+          <section id="overview-section" class="view-section">
+            <div class="stats-grid">
+              <article class="stat-card">
+                <span>Total users</span>
+                <strong id="total-users">0</strong>
+              </article>
+              <article class="stat-card">
+                <span>Online</span>
+                <strong id="online-users">0</strong>
+              </article>
+              <article class="stat-card">
+                <span>Offline</span>
+                <strong id="offline-users">0</strong>
+              </article>
+            </div>
+            <div class="action-grid">
+              <button class="action-card blue" data-view-target="users">Add user</button>
+              <button class="action-card green" data-view-target="users">Users list</button>
+              <button class="action-card orange" data-view-target="map">GPS location</button>
+              <button class="action-card indigo" data-view-target="clients">Clients pointes</button>
+              <button class="action-card teal" data-view-target="reports">Rapports journaliers</button>
+            </div>
+          </section>
+
+          <section id="users-section" class="view-section hidden">
+            <div class="section-toolbar">
+              <h2>Users list</h2>
+              <button id="open-user-modal" class="primary-button">Add user</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="users-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="map-section" class="view-section hidden">
+            <div class="map-controls">
+              <label>
+                Choose a user
+                <select id="map-user-select">
+                  <option value="">Select user</option>
+                </select>
+              </label>
+              <label>
+                Date
+                <input id="history-date" type="date" />
+              </label>
+              <label>
+                Start
+                <input id="history-start" type="time" value="00:00" />
+              </label>
+              <label>
+                End
+                <input id="history-end" type="time" value="23:59" />
+              </label>
+              <div class="button-row">
+                <button id="start-tracking" class="success-button">START</button>
+                <button id="stop-tracking" class="danger-button">STOP</button>
+                <button id="show-route" class="secondary-button">Show filtered route</button>
+              </div>
+            </div>
+            <div id="map-shell" class="map-shell">
+              <div class="map-toolbar" aria-label="Map tools">
+                <button id="fullscreen-map" type="button" class="map-tool-button" title="Full screen" aria-label="Full screen">
+                  <span aria-hidden="true">⛶</span>
+                </button>
+                <button id="pause-route" type="button" class="map-tool-button" title="Pause animation" aria-label="Pause animation" disabled>
+                  <span aria-hidden="true">Ⅱ</span>
+                </button>
+              </div>
+              <div id="map"></div>
+            </div>
+          </section>
+
+          <section id="clients-section" class="view-section hidden">
+            <div class="section-toolbar clients-toolbar">
+              <div>
+                <h2>Clients pointes</h2>
+                <p id="clients-summary">0 client</p>
+              </div>
+              <div class="clients-actions">
+                <label>
+                  Utilisateur
+                  <select id="clients-user-filter">
+                    <option value="">Tous les utilisateurs</option>
+                  </select>
+                </label>
+                <button id="refresh-clients" class="secondary-button">Refresh</button>
+                <button id="export-clients" class="success-button">Export Excel</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Type</th>
+                    <th>Utilisateur</th>
+                    <th>Username</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="clients-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="reports-section" class="view-section hidden">
+            <div class="section-toolbar clients-toolbar">
+              <div>
+                <h2>Rapports journaliers</h2>
+                <p id="reports-summary">0 rapport</p>
+              </div>
+              <div class="clients-actions">
+                <label>
+                  Utilisateur
+                  <select id="reports-user-filter">
+                    <option value="">Tous les utilisateurs</option>
+                  </select>
+                </label>
+                <label>
+                  Date
+                  <input id="reports-date-filter" type="date" />
+                </label>
+                <button id="refresh-reports" class="secondary-button">Refresh</button>
+                <button id="export-reports" class="success-button">Export Excel total</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Utilisateur</th>
+                    <th>Username</th>
+                    <th>Client</th>
+                    <th>Type client</th>
+                    <th>Activite</th>
+                    <th>Telephone</th>
+                    <th>Wilaya</th>
+                    <th>Commune</th>
+                    <th>Produits</th>
+                    <th>Observation</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reports-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="user-modal">
+      <form id="user-form" method="dialog" class="modal-card">
+        <h2 id="user-modal-title">Create user</h2>
+        <input id="editing-username" type="hidden" />
+        <label>
+          First Name
+          <input id="first-name" required />
+        </label>
+        <label>
+          Last Name
+          <input id="last-name" required />
+        </label>
+        <label>
+          Username
+          <input id="username" required />
+        </label>
+        <label>
+          Password
+          <input id="password" required />
+        </label>
+        <menu>
+          <button id="cancel-user" type="button" class="ghost-button">Annuler</button>
+          <button type="submit" class="primary-button">Enregistrer</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
