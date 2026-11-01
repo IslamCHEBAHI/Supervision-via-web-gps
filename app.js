@@ -784,9 +784,27 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
       <meta charset="UTF-8">
       <style>
         body {font-family:Arial;color:#172033}
-        table {border-collapse:collapse;width:100%}
-        th,td {border:1px solid #cbd5e1;padding:8px;vertical-align:top}
-        th {background:#172b4d;color:white}
+        table {
+          border-collapse: collapse;
+          width: 100%;
+          font-size: 11px;
+        }
+
+        th, td {
+          border: 1px solid #cbd5e1;
+          padding: 10px;
+          text-align: center;
+          vertical-align: middle;
+          mso-number-format: General;
+        }
+
+        th {
+          background: #172b4d;
+          color: #ffffff;
+          font-weight: bold;
+          text-align: center;
+          vertical-align: middle;
+        }
         .title {background:#172b4d;color:white;font-size:22px;font-weight:bold}
       </style>
     </head>
