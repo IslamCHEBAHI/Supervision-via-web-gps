@@ -476,78 +476,94 @@ function renderReportsUserFilter() {
 // ================= GAMMES BON D'ACHAT =================
 
 const GAMME_ACHAT_OPTIONS = [
-  "Concept",
-  "Zyttria",
+  "Concept Zyttria",
   "Shofu",
-  "Résine PMMA",
+  "Résine AKRODENT et ELEGOO",
   "Turbine Senda",
-  "Fils de suture",
-  "Diadent",
-  "Imprimante 3D",
-  "Cure fauteuil dentaire Denco",
-  "Endodontie"
+  "Fils de suture VMG",
+  "Diadent Endodontie",
+  "Imprimante 3D ELEGOO",
+  "Fauteuil dentaire",
+  "Denco Endodontie",
+  "SIA Orthodontie"
 ];
+
+function normalizeGamme(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 
 // Affichage de toutes les gammes avec une croix
 // devant celles achetées par le client.
+
 function renderBonAchatCell(report) {
-  const gammesAchetees = new Set(
-    Array.isArray(report.gammesAchetees)
-      ? report.gammesAchetees.map(g => String(g))
-      : []
-  );
-
-  const lignes = GAMME_ACHAT_OPTIONS.map(gamme => {
-    const achetee =
-      report.bonAchat === "Oui" && gammesAchetees.has(gamme);
-
-    return `
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        gap:10px;
-        padding:3px 0;
-        border-bottom:1px solid #eeeeee;
-      ">
-        <span>${escapeHtml(gamme)}</span>
-        <strong style="
-          color:#15803d;
-          min-width:20px;
-          text-align:center;
-        ">${achetee ? "✕" : ""}</strong>
-      </div>
-    `;
-  }).join("");
-
-  const montant = Number(report.totalBonAchat) || 0;
+  const bonAchat = String(report.bonAchat || "Non").trim();
+  const montant = Number(
+    String(report.totalBonAchat ?? 0)
+      .replace(/\s/g, "")
+      .replace(",", ".")
+  ) || 0;
 
   const montantFormate = new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: 2
   }).format(montant);
 
-  return `
-    <div style="min-width:220px;text-align:left;">
-      <div style="margin-bottom:8px;">
-        <strong>Bon d'achat :</strong>
-        ${escapeHtml(report.bonAchat || "Non renseigné")}
-      </div>
+  const achatEffectue = bonAchat === "Oui";
 
-      <div>
-        ${lignes}
+  return `
+    <div style="
+      min-width:150px;
+      padding:10px;
+      border:1px solid #e2e8f0;
+      border-radius:8px;
+      background:#ffffff;
+      text-align:left;
+    ">
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        margin-bottom:10px;
+      ">
+        <strong>Bon d'achat</strong>
+
+        <span style="
+          padding:4px 9px;
+          border-radius:20px;
+          font-size:11px;
+          font-weight:bold;
+          color:${achatEffectue ? '#166534' : '#991b1b'};
+          background:${achatEffectue ? '#dcfce7' : '#fee2e2'};
+        ">
+          ${achatEffectue ? "OUI" : "NON"}
+        </span>
       </div>
 
       <div style="
-        margin-top:8px;
         padding-top:8px;
-        border-top:2px solid #d1d5db;
-        font-weight:bold;
+        border-top:1px solid #e2e8f0;
+        color:#475569;
+        font-size:12px;
+      ">
+        Total du bon d'achat
+      </div>
+
+      <div style="
+        margin-top:5px;
+        font-size:17px;
+        font-weight:800;
         color:#0f766e;
       ">
-        TOTAL : ${montantFormate} DA
+        ${montantFormate} DA
       </div>
     </div>
   `;
 }
+
 
 async function loadAllReports() {
   reportRows = [];
@@ -600,7 +616,7 @@ async function loadAllReports() {
         interestedProducts: String(visit.interestedProducts ?? ""),
         bonAchat: String(visit.bonAchat ?? ""),
         gammesAchetees: Array.isArray(visit.gammesAchetees)
-          ? visit.gammesAchetees.map(g => String(g))
+          ? visit.gammesAchetees.map(normalizeGamme)
           : [],
 
         totalBonAchat: Number(
@@ -703,7 +719,7 @@ async function getReportLogoDataUrl() {
 function renderPurchaseExport(report) {
   const purchased = new Set(
     Array.isArray(report.gammesAchetees)
-      ? report.gammesAchetees.map(String)
+      ? report.gammesAchetees.map(normalizeGamme)
       : []
   );
 
@@ -713,7 +729,7 @@ function renderPurchaseExport(report) {
     <tr>
       <td>${escapeHtml(gamme)}</td>
       <td style="text-align:center;color:#15803d;font-weight:bold">
-        ${report.bonAchat === "Oui" && purchased.has(gamme) ? "✕" : "—"}
+        ${report.bonAchat === "Oui" && purchased.has(normalizeGamme(gamme)) ? "✕" : "—"}
       </td>
     </tr>
   `).join("");
