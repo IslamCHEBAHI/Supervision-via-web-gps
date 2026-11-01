@@ -498,7 +498,8 @@ function renderBonAchatCell(report) {
   );
 
   const lignes = GAMME_ACHAT_OPTIONS.map(gamme => {
-    const achetee = gammesAchetees.has(gamme);
+    const achetee =
+      report.bonAchat === "Oui" && gammesAchetees.has(gamme);
 
     return `
       <div style="
@@ -698,6 +699,47 @@ async function getReportLogoDataUrl() {
   return REPORT_LOGO_DATA_URL;
 }
 
+
+function renderPurchaseExport(report) {
+  const purchased = new Set(
+    Array.isArray(report.gammesAchetees)
+      ? report.gammesAchetees.map(String)
+      : []
+  );
+
+  const amount = Number(report.totalBonAchat) || 0;
+
+  const rows = GAMME_ACHAT_OPTIONS.map(gamme => `
+    <tr>
+      <td>${escapeHtml(gamme)}</td>
+      <td style="text-align:center;color:#15803d;font-weight:bold">
+        ${report.bonAchat === "Oui" && purchased.has(gamme) ? "✕" : "—"}
+      </td>
+    </tr>
+  `).join("");
+
+  return `
+    <div style="font-size:11px;min-width:210px">
+      <p><strong>Bon d'achat :</strong>
+        ${escapeHtml(report.bonAchat || "Non renseigné")}
+      </p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th>Gamme</th>
+            <th>Achat</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="font-weight:bold;color:#087443">
+        TOTAL : ${new Intl.NumberFormat("fr-FR").format(amount)} DA
+      </p>
+    </div>
+  `;
+}
+
+
 async function exportReportsToExcel(rows = reportRows, filename = "rapports_journaliers.xls") {
   if (!rows.length) {
     showToast("Aucun rapport a exporter");
@@ -705,70 +747,62 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
   }
 
   const meta = buildReportMeta(rows);
-  const tableRows = rows.map((report) => `
+
+  const tableRows = rows.map(report => `
     <tr>
-      <td style="font-weight:bold;text-align:center;vertical-align:middle;">${escapeHtml(report.clientName)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.clientType)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.activityType)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.phone)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.wilaya)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.commune)}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.interestedProducts).replaceAll("\n", "<br>")}</td>
-      <td style="text-align:center;vertical-align:middle;">${escapeHtml(report.observation).replaceAll("\n", "<br>")}</td>
+      <td>${escapeHtml(report.clientName)}</td>
+      <td>${escapeHtml(report.clientType)}</td>
+      <td>${escapeHtml(report.activityType)}</td>
+      <td>${escapeHtml(report.phone)}</td>
+      <td>${escapeHtml(report.wilaya)}</td>
+      <td>${escapeHtml(report.commune)}</td>
+      <td>${escapeHtml(report.interestedProducts)}</td>
+      <td>${renderPurchaseExport(report)}</td>
+      <td>${escapeHtml(report.observation)}</td>
     </tr>
   `).join("");
 
   const html = `
     <html>
-      <head><meta charset="UTF-8"></head>
-      <body>
-        <table border="1" style="border-collapse:collapse;font-family:Arial,sans-serif;text-align:center;vertical-align:middle;">
-          <tr>
-            <td colspan="8" style="height:58px;background:#f97316;color:#ffffff;font-size:22px;font-weight:bold;text-align:center;vertical-align:middle;">
-              RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE
-            </td>
-          </tr>
-          <tr>
-            <td colspan="8" style="height:28px;background:#fff7ed;color:#9a3412;font-weight:bold;text-align:center;">
-              Export genere le ${escapeHtml(new Date().toLocaleDateString("fr-FR"))}
-            </td>
-          </tr>
-          <tr>
-            <td colspan="8" style="height:30px;background:#f8fafc;color:#111827;font-weight:bold;text-align:center;">
-              Utilisateur : ${escapeHtml(meta.userFullName)}
-            </td>
-          </tr>
-          <tr>
-            <td colspan="8" style="height:30px;background:#f8fafc;color:#111827;font-weight:bold;text-align:center;">
-              Username : ${escapeHtml(meta.username)}
-            </td>
-          </tr>
-          <tr>
-            <td colspan="8" style="height:30px;background:#f8fafc;color:#111827;font-weight:bold;text-align:center;">
-              Date du rapport : ${escapeHtml(meta.reportDate)}
-            </td>
-          </tr>
-          <thead>
-            <tr>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Client</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Type client</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Activite</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Telephone</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Wilaya</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Commune</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Produits</th>
-              <th style="background:#111827;color:#ffffff;text-align:center;">Observation</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body {font-family:Arial;color:#172033}
+        table {border-collapse:collapse;width:100%}
+        th,td {border:1px solid #cbd5e1;padding:8px;vertical-align:top}
+        th {background:#172b4d;color:white}
+        .title {background:#172b4d;color:white;font-size:22px;font-weight:bold}
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td colspan="9" class="title">
+          RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE
+        </td></tr>
+        <tr><td colspan="9">Utilisateur : ${escapeHtml(meta.userFullName)}</td></tr>
+        <tr><td colspan="9">Username : ${escapeHtml(meta.username)}</td></tr>
+        <tr><td colspan="9">Date : ${escapeHtml(meta.reportDate)}</td></tr>
+        <tr>
+          <th>Client</th>
+          <th>Type client</th>
+          <th>Activité</th>
+          <th>Téléphone</th>
+          <th>Wilaya</th>
+          <th>Commune</th>
+          <th>Produits intéressés</th>
+          <th>Bon d'achat et gammes achetées</th>
+          <th>Observation</th>
+        </tr>
+        ${tableRows}
+      </table>
+    </body>
     </html>
   `;
 
   const blob = new Blob(["\ufeff", html], {
-    type: "application/vnd.ms-excel;charset=utf-8",
+    type: "application/vnd.ms-excel;charset=utf-8"
   });
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -777,8 +811,10 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+
   showToast("Fichier Excel telecharge");
 }
+
 
 function exportReportToExcel(reportId) {
   exportReportsToExcel(
@@ -818,71 +854,99 @@ function buildReportMeta(rows) {
   };
 }
 
+
 function buildPrintableReportHtml(rows) {
   const meta = buildReportMeta(rows);
-  const bodyRows = rows.map((report) => `
+
+  const bodyRows = rows.map(report => `
     <tr>
-      <td><strong>${escapeHtml(report.clientName)}</strong></td>
+      <td>${escapeHtml(report.clientName)}</td>
       <td>${escapeHtml(report.clientType)}</td>
       <td>${escapeHtml(report.activityType)}</td>
       <td>${escapeHtml(report.phone)}</td>
       <td>${escapeHtml(report.wilaya)}</td>
       <td>${escapeHtml(report.commune)}</td>
-      <td>${escapeHtml(report.interestedProducts).replaceAll("\n", "<br>")}</td>
-      <td>${escapeHtml(report.observation).replaceAll("\n", "<br>")}</td>
+      <td>${escapeHtml(report.interestedProducts)}</td>
+      <td>${escapeHtml(report.observation)}</td>
     </tr>
   `).join("");
+
+  const purchases = rows.map(report => `
+    <section class="purchase">
+      <h3>${escapeHtml(report.clientName)}</h3>
+      <p>Bon d'achat :
+        <strong>${escapeHtml(report.bonAchat || "Non renseigné")}</strong>
+      </p>
+      ${renderPurchaseExport(report)}
+    </section>
+  `).join("");
+
   return `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Rapport journalier</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
-          .header { border-bottom: 4px solid #f97316; padding-bottom: 14px; margin-bottom: 18px; text-align: center; }
-          h1 { margin: 0; color: #f97316; font-size: 24px; text-align: center; }
-          .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 18px; text-align: center; }
-          .meta-item { border: 1px solid #d1d5db; background: #f8fafc; padding: 10px; font-size: 13px; }
-          .meta-label { display: block; color: #6b7280; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-          .meta-value { display: block; margin-top: 4px; color: #111827; font-weight: 800; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; }
-          th { background: #111827; color: white; }
-          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: center; vertical-align: middle; }
-          tr:nth-child(even) td { background: #fff7ed; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE</h1>
-        </div>
-        <div class="meta">
-          <div class="meta-item">
-            <span class="meta-label">Utilisateur</span>
-            <span class="meta-value">${escapeHtml(meta.userFullName)}</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">Username</span>
-            <span class="meta-value">${escapeHtml(meta.username)}</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">Date du rapport</span>
-            <span class="meta-value">${escapeHtml(meta.reportDate)}</span>
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Client</th><th>Type client</th>
-              <th>Activite</th><th>Telephone</th><th>Wilaya</th><th>Commune</th><th>Produits</th><th>Observation</th>
-            </tr>
-          </thead>
-          <tbody>${bodyRows}</tbody>
-        </table>
-      </body>
-    </html>
+  <!DOCTYPE html>
+  <html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <title>Rapport commercial</title>
+    <style>
+      @page {size:A4 landscape;margin:12mm}
+      body {font-family:Arial;color:#172033;font-size:11px}
+      header {
+        background:#172b4d;color:white;padding:18px;
+        border-bottom:5px solid #e57b18;
+      }
+      h1 {font-size:21px;margin:0}
+      .meta {
+        display:grid;grid-template-columns:repeat(3,1fr);
+        gap:10px;margin:15px 0;
+      }
+      .meta div {background:#f1f5f9;padding:12px;border:1px solid #cbd5e1}
+      table {width:100%;border-collapse:collapse;margin-bottom:18px}
+      th {background:#172b4d;color:white}
+      th,td {border:1px solid #cbd5e1;padding:7px;text-align:left}
+      .purchase {
+        border:1px solid #cbd5e1;padding:12px;
+        margin:12px 0;break-inside:avoid;
+      }
+      .purchase h3 {color:#172b4d}
+      .purchase table {width:100%;font-size:10px}
+      .purchase table th {background:#eaf0f7;color:#172b4d}
+      .purchase p {font-weight:bold}
+      @media print {
+        body {-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE</h1>
+      <p>Suivi des visites et des bons d'achat</p>
+    </header>
+
+    <div class="meta">
+      <div>Utilisateur : <strong>${escapeHtml(meta.userFullName)}</strong></div>
+      <div>Username : <strong>${escapeHtml(meta.username)}</strong></div>
+      <div>Date : <strong>${escapeHtml(meta.reportDate)}</strong></div>
+    </div>
+
+    <h2>1. Informations des visites</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th><th>Type</th><th>Activité</th>
+          <th>Téléphone</th><th>Wilaya</th><th>Commune</th>
+          <th>Produits</th><th>Observation</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+
+    <h2>2. Détail des bons d'achat</h2>
+    ${purchases}
+  </body>
+  </html>
   `;
 }
+
 
 async function deleteReport(report) {
   const confirmed = window.confirm(`Supprimer le rapport du ${formatDateOnly(report.reportDate)} ?`);
