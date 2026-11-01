@@ -1,4 +1,4 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   collection,
   deleteDoc,
@@ -473,6 +473,81 @@ function renderReportsUserFilter() {
   }
 }
 
+// ================= GAMMES BON D'ACHAT =================
+
+const GAMME_ACHAT_OPTIONS = [
+  "Concept",
+  "Zyttria",
+  "Shofu",
+  "Résine PMMA",
+  "Turbine Senda",
+  "Fils de suture",
+  "Diadent",
+  "Imprimante 3D",
+  "Cure fauteuil dentaire Denco",
+  "Endodontie"
+];
+
+// Affichage de toutes les gammes avec une croix
+// devant celles achetées par le client.
+function renderBonAchatCell(report) {
+  const gammesAchetees = new Set(
+    Array.isArray(report.gammesAchetees)
+      ? report.gammesAchetees.map(g => String(g))
+      : []
+  );
+
+  const lignes = GAMME_ACHAT_OPTIONS.map(gamme => {
+    const achetee = gammesAchetees.has(gamme);
+
+    return `
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        gap:10px;
+        padding:3px 0;
+        border-bottom:1px solid #eeeeee;
+      ">
+        <span>${escapeHtml(gamme)}</span>
+        <strong style="
+          color:#15803d;
+          min-width:20px;
+          text-align:center;
+        ">${achetee ? "✕" : ""}</strong>
+      </div>
+    `;
+  }).join("");
+
+  const montant = Number(report.totalBonAchat) || 0;
+
+  const montantFormate = new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 2
+  }).format(montant);
+
+  return `
+    <div style="min-width:220px;text-align:left;">
+      <div style="margin-bottom:8px;">
+        <strong>Bon d'achat :</strong>
+        ${escapeHtml(report.bonAchat || "Non renseigné")}
+      </div>
+
+      <div>
+        ${lignes}
+      </div>
+
+      <div style="
+        margin-top:8px;
+        padding-top:8px;
+        border-top:2px solid #d1d5db;
+        font-weight:bold;
+        color:#0f766e;
+      ">
+        TOTAL : ${montantFormate} DA
+      </div>
+    </div>
+  `;
+}
+
 async function loadAllReports() {
   reportRows = [];
   renderReportsTable(true);
@@ -506,6 +581,9 @@ async function loadAllReports() {
         wilaya: data.wilaya,
         commune: data.commune,
         interestedProducts: data.interestedProducts,
+        bonAchat: data.bonAchat,
+        gammesAchetees: data.gammesAchetees,
+        totalBonAchat: data.totalBonAchat,
         observation: data.observation,
       }];
       return visits.map((visit, index) => ({
@@ -519,6 +597,16 @@ async function loadAllReports() {
         wilaya: String(visit.wilaya ?? ""),
         commune: String(visit.commune ?? ""),
         interestedProducts: String(visit.interestedProducts ?? ""),
+        bonAchat: String(visit.bonAchat ?? ""),
+        gammesAchetees: Array.isArray(visit.gammesAchetees)
+          ? visit.gammesAchetees.map(g => String(g))
+          : [],
+
+        totalBonAchat: Number(
+          String(visit.totalBonAchat ?? 0)
+            .replace(/\s/g, "")
+            .replace(",", ".")
+        ) || 0,
         observation: String(visit.observation ?? ""),
       }));
     });
@@ -531,7 +619,7 @@ async function loadAllReports() {
     renderReportsTable(false);
   } catch (error) {
     els.reportsSummary.textContent = "Erreur lecture rapports";
-    els.reportsTable.innerHTML = `<tr><td colspan="12">Erreur Firebase : ${escapeHtml(error.message)}</td></tr>`;
+    els.reportsTable.innerHTML = `<tr><td colspan="13">Erreur Firebase : ${escapeHtml(error.message)}</td></tr>`;
   }
 }
 
@@ -543,12 +631,12 @@ function renderReportsTable(isLoading = false) {
     : `${reportGroups.length} rapport${reportGroups.length > 1 ? "s" : ""} / ${reportRows.length} client${reportRows.length > 1 ? "s" : ""}`;
 
   if (isLoading) {
-    els.reportsTable.innerHTML = `<tr><td colspan="12">Chargement des rapports...</td></tr>`;
+    els.reportsTable.innerHTML = `<tr><td colspan="13">Chargement des rapports...</td></tr>`;
     return;
   }
 
   if (!reportRows.length) {
-    els.reportsTable.innerHTML = `<tr><td colspan="12">Aucun rapport journalier.</td></tr>`;
+    els.reportsTable.innerHTML = `<tr><td colspan="13">Aucun rapport journalier.</td></tr>`;
     return;
   }
 
@@ -566,6 +654,7 @@ function renderReportsTable(isLoading = false) {
       <td>${group.rows.map((item) => escapeHtml(item.wilaya)).join("<br>")}</td>
       <td>${group.rows.map((item) => escapeHtml(item.commune)).join("<br>")}</td>
       <td>${group.rows.map((item) => escapeHtml(item.interestedProducts).replaceAll("\n", "<br>")).join("<hr>")}</td>
+      <td>${group.rows.map(item => renderBonAchatCell(item)).join("<hr>")}</td>
       <td>${group.rows.map((item) => escapeHtml(item.observation).replaceAll("\n", "<br>")).join("<hr>")}</td>
       <td>
         <div class="row-actions">
