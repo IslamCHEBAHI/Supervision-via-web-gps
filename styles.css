@@ -647,3 +647,372 @@ menu {
     grid-template-columns: 1fr;
   }
 }
+
+/* =====================================================
+   MEDICAL BIOTOP — ZONING COMMERCIAL
+   Alger Est | Alger Ouest | Alger Centre
+   ===================================================== */
+
+/* Couleur supplémentaire */
+.violet {
+  background: #6d4acb;
+}
+
+/* Navigation */
+.nav-button {
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.nav-button:hover {
+  background: rgba(255,255,255,0.13);
+}
+
+/* Espacement général du Zoning */
+#zoning-section {
+  animation: zoningFadeIn 0.3s ease;
+}
+
+@keyframes zoningFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Présentation des titres */
+#zoning-section .section-toolbar h2 {
+  color: #18344f;
+  font-size: 21px;
+  font-weight: 800;
+  margin-bottom: 7px;
+}
+
+#zoning-section .section-toolbar p {
+  color: #718096;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+/* Bloc de configuration */
+#zoning-section > .stat-card:first-of-type {
+  border-left: 4px solid #2563eb;
+  box-shadow: 0 5px 20px rgba(15, 35, 60, 0.04);
+  line-height: 1.7;
+}
+
+#zoning-status {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Cartes des trois zones */
+#zoning-section > .stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+#zoning-section > .stats-grid .stat-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 145px;
+  border: 1px solid #e1e8f0;
+  border-radius: 12px;
+  padding: 22px;
+  background: #fff;
+  box-shadow: 0 5px 20px rgba(15, 35, 60, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#zoning-section > .stats-grid .stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(15, 35, 60, 0.09);
+}
+
+#zoning-section > .stats-grid .stat-card:nth-child(1) {
+  border-top: 4px solid #168bca;
+}
+
+#zoning-section > .stats-grid .stat-card:nth-child(2) {
+  border-top: 4px solid #159b78;
+}
+
+#zoning-section > .stats-grid .stat-card:nth-child(3) {
+  border-top: 4px solid #e59b32;
+}
+
+#zoning-section > .stats-grid .stat-card span {
+  display: block;
+  color: #66758a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+#zoning-section > .stats-grid .stat-card strong {
+  margin-top: 13px;
+  color: #18344f;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+#zoning-section > .stats-grid .stat-card p {
+  margin: 8px 0;
+  color: #718096;
+  font-size: 12px;
+}
+
+#zoning-section > .stats-grid .stat-card > span:last-child {
+  margin-top: 8px;
+}
+
+/* Boutons */
+#zoning-section button {
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+#zoning-section button:hover {
+  filter: brightness(0.96);
+}
+
+#zoning-section button:active {
+  transform: scale(0.98);
+}
+
+#zoning-section button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Bouton actualisation */
+#refresh-zoning {
+  border: 1px solid #dce4ed;
+  background: #fff;
+  color: #18344f;
+}
+
+/* Boutons d'enregistrement */
+#save-zoning-communes,
+#save-zoning-users {
+  background: #176bba;
+  color: #fff;
+  border-radius: 7px;
+  padding: 11px 18px;
+  font-weight: 800;
+}
+
+/* Tableaux */
+#zoning-section .table-wrap {
+  margin-bottom: 25px;
+  border: 1px solid #e1e7ef;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 15px rgba(15, 35, 60, 0.035);
+}
+
+#zoning-section table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+#zoning-section th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 15px 13px;
+  background: #f1f5f9;
+  color: #43546b;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  border-bottom: 1px solid #dce4ed;
+}
+
+#zoning-section td {
+  padding: 13px;
+  color: #334155;
+  font-size: 13px;
+  text-align: center;
+  vertical-align: middle;
+  border-bottom: 1px solid #edf1f5;
+}
+
+#zoning-section tbody tr:hover {
+  background: #f7faff;
+}
+
+#zoning-section tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Nom des communes en arabe */
+#zoning-section td[lang="ar"] {
+  direction: rtl;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Champs de sélection */
+#zoning-section select,
+#zoning-section input {
+  min-height: 40px;
+  border: 1px solid #d5deea;
+  border-radius: 7px;
+  padding: 8px 11px;
+  background: #fff;
+  color: #24364b;
+  font-size: 13px;
+}
+
+#zoning-section select:focus,
+#zoning-section input:focus {
+  outline: none;
+  border-color: #3985d6;
+  box-shadow: 0 0 0 3px rgba(57, 133, 214, 0.12);
+}
+
+/* Sélection de la zone */
+#zoning-section td select {
+  min-width: 165px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Sélection des utilisateurs */
+#zoning-users-table td select {
+  min-width: 190px;
+}
+
+/* Filtres commerciaux */
+#zoning-section .map-controls {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  align-items: end;
+  padding: 18px;
+  border: 1px solid #e1e7ef;
+  border-radius: 10px;
+  background: #fff;
+}
+
+#zoning-section .map-controls button {
+  min-height: 42px;
+}
+
+/* Indicateurs commerciaux */
+#zoning-section .stats-grid:has(#zoning-kpi-clients) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 20px;
+}
+
+#zoning-section .stats-grid:has(#zoning-kpi-clients) .stat-card {
+  min-height: 125px;
+  border-top: 3px solid #2563eb;
+}
+
+#zoning-kpi-clients,
+#zoning-kpi-visits,
+#zoning-kpi-bons-count {
+  color: #176bba !important;
+}
+
+#zoning-kpi-bons-amount {
+  color: #12805c !important;
+  font-size: 27px !important;
+}
+
+/* Tableau des rapports */
+#zoning-reports-table td {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Message vide */
+#zoning-section tbody td[colspan] {
+  padding: 25px;
+  color: #8995a5;
+  text-align: center;
+}
+
+/* Barre de défilement */
+#zoning-section .table-wrap::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#zoning-section .table-wrap::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: #cbd5e1;
+}
+
+#zoning-section .table-wrap::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+/* Adaptation tablette */
+@media (max-width: 1100px) {
+  #zoning-section .stats-grid:has(#zoning-kpi-clients) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #zoning-section .map-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Adaptation mobile */
+@media (max-width: 820px) {
+  #zoning-section > .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #zoning-section .stats-grid:has(#zoning-kpi-clients) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #zoning-section .map-controls {
+    grid-template-columns: 1fr;
+  }
+
+  #zoning-section .section-toolbar {
+    align-items: stretch;
+  }
+
+  #zoning-section .section-toolbar button {
+    width: 100%;
+  }
+
+  #zoning-section .table-wrap {
+    overflow-x: auto;
+  }
+
+  #zoning-section table {
+    min-width: 700px;
+  }
+
+  #zoning-section .stats-grid .stat-card strong {
+    font-size: 29px;
+  }
+}
+
+/* Très petits écrans */
+@media (max-width: 420px) {
+  #zoning-section .stats-grid:has(#zoning-kpi-clients) {
+    grid-template-columns: 1fr;
+  }
+
+  #zoning-section .stat-card {
+    padding: 16px;
+  }
+}

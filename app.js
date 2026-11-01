@@ -1,8 +1,9 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -52,6 +53,812 @@ let mapExpanded = false;
 let map = null;
 let clientRows = [];
 let reportRows = [];
+
+const ALGER_CIRCONSCRIPTIONS = [
+  ["Zéralda", "alger_ouest", [
+    ["46", "Zéralda"],
+    ["45", "Staouéli"],
+    ["49", "Souidania"],
+    ["47", "Mahelma"],
+    ["48", "Rahmania"]
+  ]],
+
+  ["Chéraga", "alger_ouest", [
+    ["50", "Chéraga"],
+    ["51", "Ouled Fayet"],
+    ["44", "Aïn Benian"],
+    ["23", "Dely Ibrahim"],
+    ["24", "Hammamet"]
+  ]],
+
+  ["Draria", "alger_ouest", [
+    ["54", "Douéra"],
+    ["56", "Khraissia"],
+    ["53", "Draria"],
+    ["55", "Baba Hassen"],
+    ["52", "El Achour"]
+  ]],
+
+  ["Birtouta", "alger_ouest", [
+    ["34", "Birtouta"],
+    ["36", "Ouled Chebel"],
+    ["35", "Tessala El Merdja"]
+  ]],
+
+  ["Bir Mourad Raïs", "alger_centre", [
+    ["09", "Bir Mourad Raïs"],
+    ["12", "Birkhadem"],
+    ["26", "Djasr Kasentina"],
+    ["57", "Saoula"],
+    ["28", "Hydra"]
+  ]],
+
+  ["Bouzaréah", "alger_centre", [
+    ["11", "Bouzaréah"],
+    ["32", "Béni Messous"],
+    ["22", "Ben Aknoun"],
+    ["10", "El Biar"]
+  ]],
+
+  ["Bab El Oued", "alger_centre", [
+    ["05", "Bab El Oued"],
+    ["08", "Oued Koriche"],
+    ["06", "Bologhine"],
+    ["25", "Raïs Hamidou"],
+    ["07", "Casbah"]
+  ]],
+
+  ["Hussein Dey", "alger_est", [
+    ["04", "Belouizdad"],
+    ["17", "Hussein Dey"],
+    ["18", "Kouba"],
+    ["31", "El Magharia"]
+  ]],
+
+  ["Sidi M'Hamed", "alger_centre", [
+    ["02", "Sidi M'Hamed"],
+    ["03", "El Madania"],
+    ["01", "Alger-Centre"],
+    ["27", "El Mouradia"]
+  ]],
+
+  ["El Harrach", "alger_est", [
+    ["19", "Bourouba"],
+    ["16", "Bachdjerrah"],
+    ["15", "Oued Smar"],
+    ["13", "El Harrach"],
+    ["29", "Mohammadia"]
+  ]],
+
+  ["Baraki", "alger_est", [
+    ["14", "Baraki"],
+    ["33", "Les Eucalyptus"],
+    ["37", "Sidi Moussa"]
+  ]],
+
+  ["Dar El Beïda", "alger_est", [
+    ["39", "Bordj El Bahri"],
+    ["20", "Dar El Beïda"],
+    ["21", "Bab Ezzouar"],
+    ["30", "Bordj El Kiffan"]
+  ]],
+
+  ["Rouiba", "alger_est", [
+    ["42", "Rouiba"],
+    ["43", "Reghaïa"],
+    ["41", "H'raoua"],
+    ["38", "Aïn Taya"],
+    ["40", "El Marsa"]
+  ]]
+];
+
+const ALGER_COMMUNES = ALGER_CIRCONSCRIPTIONS.flatMap(
+  ([circonscription, defaultZone, communes]) =>
+    communes.map(([code, commune]) => ({
+      code,
+      wilaya: "Alger",
+      circonscription,
+      commune,
+      defaultZone
+    }))
+);
+
+if (ALGER_COMMUNES.length !== 57) {
+  throw new Error("Erreur : la liste doit contenir 57 communes.");
+}
+// Configuration des zones commerciales
+const ZONING_ZONES = {
+  alger_est: "Alger Est",
+  alger_ouest: "Alger Ouest",
+  alger_centre: "Alger Centre"
+};
+
+// Document de configuration dans Firebase
+const ZONING_CONFIG_REF = [
+  "tracking_latest",
+  "_zoning_alger_config"
+];
+
+// Données du module
+let zoningCommunes = [];
+let zoningReportRows = [];
+let zoningLoading = false;
+
+// =====================================================
+// ZONING — CHARGEMENT ET AFFICHAGE DES COMMUNES
+// =====================================================
+
+async function loadZoningCommunes() {
+  const configRef = doc(db, ...ZONING_CONFIG_REF);
+  const snapshot = await getDoc(configRef);
+
+  const savedZones = snapshot.exists()
+    ? snapshot.data().communes || {}
+    : {};
+
+  zoningCommunes = ALGER_COMMUNES.map((commune) => ({
+    ...commune,
+    zoneId: ZONING_ZONES[savedZones[commune.code]]
+      ? savedZones[commune.code]
+      : commune.defaultZone
+  }));
+}
+
+
+// =====================================================
+// AFFICHAGE DU TABLEAU DES COMMUNES
+// =====================================================
+
+function renderZoningCommunesTable() {
+  if (!els.zoningCommunesTable) return;
+
+  els.zoningCommunesTable.innerHTML = zoningCommunes.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.code)}</td>
+      <td>Alger</td>
+      <td>${escapeHtml(item.circonscription)}</td>
+      <td><strong>${escapeHtml(item.commune)}</strong></td>
+      <td>
+        <select
+          data-commune-code="${escapeHtml(item.code)}"
+          class="zoning-zone-select"
+        >
+          ${Object.entries(ZONING_ZONES).map(([id, label]) => `
+            <option
+              value="${id}"
+              ${item.zoneId === id ? "selected" : ""}
+            >
+              ${label}
+            </option>
+          `).join("")}
+        </select>
+      </td>
+    </tr>
+  `).join("");
+}
+
+
+// =====================================================
+// STATISTIQUES DES TROIS ZONES
+// =====================================================
+
+function renderZoningZoneStats() {
+  const counts = {
+    alger_est: 0,
+    alger_ouest: 0,
+    alger_centre: 0
+  };
+
+  zoningCommunes.forEach((commune) => {
+    if (counts[commune.zoneId] !== undefined) {
+      counts[commune.zoneId]++;
+    }
+  });
+
+  els.zoningEstCommunesCount.textContent = counts.alger_est;
+  els.zoningOuestCommunesCount.textContent = counts.alger_ouest;
+  els.zoningCentreCommunesCount.textContent = counts.alger_centre;
+  // Nombre d'utilisateurs par zone
+  const userCounts = {
+    alger_est: 0,
+    alger_ouest: 0,
+    alger_centre: 0
+  };
+
+  users.forEach((user) => {
+    const zone = user.commercialZone || user.zoneId;
+
+    if (userCounts[zone] !== undefined) {
+      userCounts[zone]++;
+    }
+  });
+
+  els.zoningEstUsersCount.textContent =
+    `${userCounts.alger_est} utilisateur(s)`;
+
+  els.zoningOuestUsersCount.textContent =
+    `${userCounts.alger_ouest} utilisateur(s)`;
+
+  els.zoningCentreUsersCount.textContent =
+    `${userCounts.alger_centre} utilisateur(s)`;
+}
+
+
+
+// ==========================================
+// AFFICHAGE DES UTILISATEURS PAR ZONE
+// ==========================================
+
+function renderZoningUsersTable() {
+  if (!els.zoningUsersTable) return;
+
+  if (!users.length) {
+    els.zoningUsersTable.innerHTML = `
+      <tr>
+        <td colspan="3">Aucun utilisateur disponible.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.zoningUsersTable.innerHTML = users.map((user) => {
+    const username = user.username ?? user.id;
+    const fullName =
+      `${user.Firstname ?? ""} ${user.Lastname ?? ""}`.trim();
+
+    const currentZone = user.commercialZone || user.zoneId || "";
+
+    return `
+      <tr>
+        <td>${escapeHtml(fullName || username)}</td>
+        <td>${escapeHtml(username)}</td>
+        <td>
+          <select
+            data-zoning-username="${escapeHtml(username)}"
+            aria-label="Zone de ${escapeHtml(username)}"
+          >
+            <option value="" ${!currentZone ? "selected" : ""}>
+              Non affecté
+            </option>
+
+            ${Object.entries(ZONING_ZONES).map(([id, label]) => `
+              <option
+                value="${id}"
+                ${currentZone === id ? "selected" : ""}
+              >
+                ${label}
+              </option>
+            `).join("")}
+          </select>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+
+// ==========================================
+// ENREGISTREMENT DES UTILISATEURS
+// ==========================================
+
+async function saveZoningUsers() {
+  const selects = [
+    ...els.zoningUsersTable.querySelectorAll(
+      "select[data-zoning-username]"
+    )
+  ];
+
+  if (!selects.length) {
+    showToast("Aucun utilisateur à enregistrer.");
+    return;
+  }
+
+  try {
+    await Promise.all(selects.map((select) => {
+      const username = select.dataset.zoningUsername;
+      const zoneId = select.value || null;
+
+      if (zoneId && !ZONING_ZONES[zoneId]) {
+        throw new Error("Zone commerciale invalide.");
+      }
+
+      return setDoc(
+        doc(db, "users", username),
+        {
+          commercialZone: zoneId,
+          commercialZoneUpdatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    }));
+
+    users = users.map((user) => {
+      const username = user.username ?? user.id;
+
+      const select = selects.find(
+        (item) => item.dataset.zoningUsername === username
+      );
+
+      if (!select) return user;
+
+      return {
+        ...user,
+        commercialZone: select.value || null
+      };
+    });
+
+    renderZoningUsersTable();
+    renderZoningZoneStats();
+
+    showToast("Affectations des utilisateurs enregistrées.");
+
+    els.zoningStatus.textContent =
+      "Les affectations des utilisateurs ont été enregistrées.";
+
+  } catch (error) {
+    console.error("Erreur affectation utilisateurs :", error);
+
+    showToast("Erreur Firebase : " + error.message);
+
+    els.zoningStatus.textContent =
+      "Erreur d'enregistrement : " + error.message;
+  }
+}
+
+
+// =====================================================
+// ENREGISTREMENT DES AFFECTATIONS DANS FIREBASE
+// =====================================================
+
+
+
+async function saveZoningCommunes() {
+  const selects = [
+    ...els.zoningCommunesTable.querySelectorAll(
+      "select[data-commune-code]"
+    )
+  ];
+
+  if (selects.length !== 57) {
+    showToast("Erreur : les 57 communes ne sont pas chargées.");
+    return;
+  }
+
+  const assignments = {};
+
+  selects.forEach((select) => {
+    assignments[select.dataset.communeCode] = select.value;
+  });
+
+  try {
+    await setDoc(
+      doc(db, ...ZONING_CONFIG_REF),
+      {
+        communes: assignments,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    zoningCommunes = zoningCommunes.map((commune) => ({
+      ...commune,
+      zoneId: assignments[commune.code]
+    }));
+
+    renderZoningZoneStats();
+
+    els.zoningStatus.textContent =
+      "Les affectations des 57 communes ont été enregistrées.";
+
+    showToast("Zoning enregistré avec succès.");
+
+  } catch (error) {
+    console.error("Erreur sauvegarde Zoning :", error);
+
+    els.zoningStatus.textContent =
+      "Erreur d'enregistrement : " + error.message;
+
+    showToast("Erreur Firebase : " + error.message);
+  }
+}
+
+
+// =====================================================
+// ZONING — LECTURE ET ANALYSE DES RAPPORTS COMMERCIAUX
+// =====================================================
+
+function normalizeZoningText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06ff]/g, "");
+}
+
+const ZONING_COMMUNE_ALIASES = {
+  guedeconstantine: "djasrkasentina",
+  khraicia: "khraissia",
+  heraoua: "hraoua",
+  hraoua: "hraoua",
+  "algercentre": "algercentre",
+  raishamidou: "raishamidou"
+};
+
+function zoningCommuneKey(value) {
+  const key = normalizeZoningText(value);
+  return ZONING_COMMUNE_ALIASES[key] || key;
+}
+
+function zoningIsAlgerWilaya(value) {
+  const wilaya = normalizeZoningText(value);
+
+  // Si la wilaya est absente, on vérifie quand même
+  // si la commune correspond au référentiel d'Alger.
+  if (!wilaya) return true;
+
+  return wilaya.includes("alger")
+    || wilaya === "16"
+    || wilaya.includes("الجزائر");
+}
+
+function zoningIsBonAchat(value) {
+  const result = normalizeZoningText(value);
+  return ["oui", "yes", "true", "1"].includes(result);
+}
+
+function zoningParseAmount(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  let raw = String(value ?? "")
+    .replace(/\s/g, "")
+    .replace(/[^\d,.-]/g, "");
+
+  if (!raw) return 0;
+
+  if (raw.includes(",") && raw.includes(".")) {
+    if (raw.lastIndexOf(",") > raw.lastIndexOf(".")) {
+      raw = raw.replace(/\./g, "").replace(",", ".");
+    } else {
+      raw = raw.replace(/,/g, "");
+    }
+  } else if (raw.includes(",")) {
+    raw = raw.replace(",", ".");
+  }
+
+  const amount = Number(raw);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function zoningGetDate(value) {
+  if (value?.toDate) return value.toDate();
+
+  if (value instanceof Date) return value;
+
+  if (value) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  return null;
+}
+
+function zoningGetDateValue(value) {
+  const date = zoningGetDate(value);
+
+  if (!date) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+
+// =====================================================
+// FILTRE DES UTILISATEURS
+// =====================================================
+
+function renderZoningUserFilter() {
+  if (!els.zoningUserFilter) return;
+
+  const selected = els.zoningUserFilter.value;
+
+  els.zoningUserFilter.innerHTML =
+    `<option value="">Tous les utilisateurs</option>`;
+
+  users.forEach((user) => {
+    const username = user.username ?? user.id;
+    const option = document.createElement("option");
+
+    option.value = username;
+    option.textContent = userLabel(user);
+
+    els.zoningUserFilter.append(option);
+  });
+
+  if (
+    selected &&
+    users.some((user) => (user.username ?? user.id) === selected)
+  ) {
+    els.zoningUserFilter.value = selected;
+  }
+}
+
+
+// =====================================================
+// CHARGEMENT DES RAPPORTS FIREBASE
+// =====================================================
+
+async function loadZoningReports() {
+  const snapshot = await getDocs(
+    query(
+      collection(db, "daily_reports"),
+      limit(1000)
+    )
+  );
+
+  const rows = [];
+
+  snapshot.docs.forEach((document) => {
+    const data = document.data();
+
+    const reportDate =
+      data.reportDate ?? data.createdAt ?? null;
+
+    const username = String(data.username ?? "");
+
+    const fullName = String(
+      data.userFullName ??
+      `${data.firstname ?? ""} ${data.lastname ?? ""}`.trim()
+    );
+
+    const visits =
+      Array.isArray(data.visits) && data.visits.length
+        ? data.visits
+        : [data];
+
+    visits.forEach((visit, index) => {
+      const wilaya = String(
+        visit.wilaya ?? data.wilaya ?? ""
+      );
+
+      const communeName = String(
+        visit.commune ?? data.commune ?? ""
+      ).trim();
+
+      if (!zoningIsAlgerWilaya(wilaya)) return;
+
+      const communeKey = zoningCommuneKey(communeName);
+
+      const commune = ALGER_COMMUNES.find(
+        (item) => zoningCommuneKey(item.commune) === communeKey
+      );
+
+      if (!commune) return;
+
+      const bonAchat = zoningIsBonAchat(
+        visit.bonAchat ?? data.bonAchat
+      );
+
+      const amount = zoningParseAmount(
+        visit.totalBonAchat ?? data.totalBonAchat
+      );
+
+      rows.push({
+        id: document.id,
+        visitNumber: index + 1,
+
+        username,
+        userFullName: fullName,
+
+        reportDate,
+        dateValue: zoningGetDateValue(reportDate),
+
+        commune: commune.commune,
+        communeCode: commune.code,
+
+        clientName: String(
+          visit.clientName ?? data.clientName ?? ""
+        ),
+
+        activityType: String(
+          visit.activityType ?? data.activityType ?? ""
+        ),
+
+        bonAchat,
+        totalBonAchat: amount
+      });
+    });
+  });
+
+  rows.sort((a, b) => {
+    const dateA = zoningGetDate(a.reportDate)?.getTime() ?? 0;
+    const dateB = zoningGetDate(b.reportDate)?.getTime() ?? 0;
+
+    return dateB - dateA;
+  });
+
+  zoningReportRows = rows;
+}
+
+
+// =====================================================
+// CALCUL ET AFFICHAGE DES RESULTATS
+// =====================================================
+
+function renderZoningResults() {
+  if (!els.zoningReportsTable) return;
+
+  const zoneFilter = els.zoningZoneFilter.value;
+  const userFilter = els.zoningUserFilter.value;
+  const dateFilter = els.zoningDateFilter.value;
+
+  const filtered = zoningReportRows.filter((report) => {
+    const commune = zoningCommunes.find(
+      (item) => item.code === report.communeCode
+    );
+
+    const zoneId = commune?.zoneId ?? commune?.defaultZone ?? "";
+
+    return (!zoneFilter || zoneId === zoneFilter)
+      && (!userFilter || report.username === userFilter)
+      && (!dateFilter || report.dateValue === dateFilter);
+  });
+
+  // Clients distincts
+  const distinctClients = new Set(
+    filtered.map((report) => {
+      const client = normalizeZoningText(report.clientName);
+
+      return client
+        ? `${client}_${report.communeCode}`
+        : `${report.id}_${report.visitNumber}`;
+    })
+  );
+
+  // Nombre de visites avec bon d'achat
+  const bonsCount = filtered.filter(
+    (report) => report.bonAchat
+  ).length;
+
+  // Montant total des bons d'achat
+  const bonsAmount = filtered.reduce(
+    (total, report) =>
+      total + (report.bonAchat ? report.totalBonAchat : 0),
+    0
+  );
+
+  const money = new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 2
+  }).format(bonsAmount);
+
+  els.zoningKpiClients.textContent = distinctClients.size;
+  els.zoningKpiVisits.textContent = filtered.length;
+  els.zoningKpiBonsCount.textContent = bonsCount;
+  els.zoningKpiBonsAmount.textContent = `${money} DA`;
+
+  els.zoningResultsSummary.textContent =
+    `${filtered.length} visite(s) correspondant aux filtres`;
+
+  if (!filtered.length) {
+    els.zoningReportsTable.innerHTML = `
+      <tr>
+        <td colspan="8">
+          Aucune visite ne correspond aux filtres sélectionnés.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.zoningReportsTable.innerHTML = filtered.map((report) => {
+    const commune = zoningCommunes.find(
+      (item) => item.code === report.communeCode
+    );
+
+    const zoneId = commune?.zoneId ?? commune?.defaultZone ?? "";
+
+    const userName =
+      report.userFullName ||
+      zoningUserNameForReport(report.username);
+
+    const amount = new Intl.NumberFormat("fr-FR", {
+      maximumFractionDigits: 2
+    }).format(report.totalBonAchat);
+
+    const date = zoningGetDate(report.reportDate);
+
+    return `
+      <tr>
+        <td>
+          ${date ? escapeHtml(date.toLocaleDateString("fr-FR")) : ""}
+        </td>
+
+        <td>${escapeHtml(userName)}</td>
+
+        <td>${escapeHtml(ZONING_ZONES[zoneId] ?? "Non affectée")}</td>
+
+        <td>${escapeHtml(report.clientName)}</td>
+
+        <td>${escapeHtml(report.commune)}</td>
+
+        <td>${escapeHtml(report.activityType)}</td>
+
+        <td>
+          ${report.bonAchat ? "Oui" : "Non"}
+        </td>
+
+        <td>
+          ${report.bonAchat ? amount + " DA" : "—"}
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function zoningUserNameForReport(username) {
+  const user = users.find(
+    (item) => (item.username ?? item.id) === username
+  );
+
+  return user ? userLabel(user) : username || "Utilisateur inconnu";
+}
+
+// =====================================================
+// CHARGEMENT GENERAL DU ZONING
+// =====================================================
+
+
+async function loadZoningData() {
+  if (zoningLoading) return;
+
+  zoningLoading = true;
+
+  els.zoningStatus.textContent =
+    "Chargement des données commerciales...";
+
+  try {
+    // 1. Charger les communes et leurs zones
+    await loadZoningCommunes();
+
+    // 2. Afficher les communes
+    renderZoningCommunesTable();
+
+    // 3. Afficher les utilisateurs
+    renderZoningUsersTable();
+    renderZoningUserFilter();
+
+    // 4. Actualiser les statistiques des zones
+    renderZoningZoneStats();
+
+    // 5. Charger les rapports commerciaux
+    await loadZoningReports();
+
+    // 6. Afficher les résultats
+    renderZoningResults();
+
+    els.zoningStatus.textContent =
+      `${zoningCommunes.length} communes chargées — ` +
+      `${zoningReportRows.length} visites commerciales analysées.`;
+
+  } catch (error) {
+    console.error("Erreur chargement Zoning :", error);
+
+    els.zoningStatus.textContent =
+      "Erreur de chargement : " + error.message;
+
+    showToast("Erreur Zoning : " + error.message);
+
+  } finally {
+    zoningLoading = false;
+  }
+}
+
+
+
 const REPORT_LOGO_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/4QDERXhpZgAATU0AKgAAAAgABgEaAAUAAAABAAAAVgEbAAUAAAABAAAAXgEoAAMAAAABAAIAAAExAAIAAAAjAAAAZgEyAAIAAAAUAAAAiodpAAQAAAABAAAAngAAAAAACvyAAAAnEAAK/IAAACcQUGhvdG9wZWEgRWRpdG9yICh3d3cucGhvdG9wZWEuY29tKQAAMjAyNjowNToyOSAxMTo1ODoxMAAAAqACAAQAAAABAAABhqADAAQAAAABAAAAgQAAAAD/4QMlaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQgYmVnaW49Iu+7vyIgaWQ9Ilc1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCI/Pgo8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJBZG9iZSBYTVAgQ29yZSA1LjYtYzE0NSA3OS4xNjM0OTksIDIwMTgvMDgvMTMtMTY6NDA6MjIiPgo8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgo8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1sbnM6dGlmZj0iaHR0cDovL25zLmFkb2JlLmNvbS90aWZmLzEuMC8iIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIiB4bWxuczpJcHRjNHhtcENvcmU9Imh0dHA6Ly9pcHRjLm9yZy9zdGQvSXB0YzR4bXBDb3JlLzEuMC94bWxucy8iIHhtbG5zOnN0RXZ0PSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VFdmVudCMi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";
 let reportLogoDataUrl = REPORT_LOGO_DATA_URL;
 
@@ -70,6 +877,7 @@ const els = {
     map: document.querySelector("#map-section"),
     clients: document.querySelector("#clients-section"),
     reports: document.querySelector("#reports-section"),
+    zoning: document.querySelector("#zoning-section"),
   },
   totalUsers: document.querySelector("#total-users"),
   onlineUsers: document.querySelector("#online-users"),
@@ -107,6 +915,38 @@ const els = {
   reportsTable: document.querySelector("#reports-table"),
   refreshReports: document.querySelector("#refresh-reports"),
   exportReports: document.querySelector("#export-reports"),
+  // Zoning commercial
+refreshZoning: document.querySelector("#refresh-zoning"),
+zoningStatus: document.querySelector("#zoning-status"),
+
+zoningEstCommunesCount: document.querySelector("#zoning-est-communes-count"),
+zoningOuestCommunesCount: document.querySelector("#zoning-ouest-communes-count"),
+zoningCentreCommunesCount: document.querySelector("#zoning-centre-communes-count"),
+
+zoningEstUsersCount: document.querySelector("#zoning-est-users-count"),
+zoningOuestUsersCount: document.querySelector("#zoning-ouest-users-count"),
+zoningCentreUsersCount: document.querySelector("#zoning-centre-users-count"),
+
+saveZoningCommunes: document.querySelector("#save-zoning-communes"),
+zoningCommunesTable: document.querySelector("#zoning-communes-table"),
+
+saveZoningUsers: document.querySelector("#save-zoning-users"),
+zoningUsersTable: document.querySelector("#zoning-users-table"),
+
+zoningZoneFilter: document.querySelector("#zoning-zone-filter"),
+zoningUserFilter: document.querySelector("#zoning-user-filter"),
+zoningDateFilter: document.querySelector("#zoning-date-filter"),
+
+applyZoningFilters: document.querySelector("#apply-zoning-filters"),
+resetZoningFilters: document.querySelector("#reset-zoning-filters"),
+
+zoningKpiClients: document.querySelector("#zoning-kpi-clients"),
+zoningKpiVisits: document.querySelector("#zoning-kpi-visits"),
+zoningKpiBonsCount: document.querySelector("#zoning-kpi-bons-count"),
+zoningKpiBonsAmount: document.querySelector("#zoning-kpi-bons-amount"),
+
+zoningResultsSummary: document.querySelector("#zoning-results-summary"),
+zoningReportsTable: document.querySelector("#zoning-reports-table"),
   toast: document.querySelector("#toast"),
 };
 
@@ -157,6 +997,10 @@ function setView(view) {
     map: ["GPS location", "Suivi live et historique des positions."],
     clients: ["Clients pointes", "Total, filtre utilisateur et export Excel."],
     reports: ["Rapports journaliers", "Lecture, filtre et export Excel des rapports."],
+    zoning: [
+      "Zoning commercial",
+      "Répartition territoriale et analyse des performances commerciales."
+    ],
   };
   els.pageTitle.textContent = titles[view][0];
   els.pageSubtitle.textContent = titles[view][1];
@@ -171,6 +1015,9 @@ function setView(view) {
   }
   if (view === "reports") {
     loadAllReports();
+  }
+  if (view === "zoning") {
+    loadZoningData();
   }
 }
 
@@ -1484,5 +2331,47 @@ document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.viewTarget));
 });
 
+// ==========================================
+// EVENEMENTS ZONING COMMERCIAL
+// ==========================================
+
+// Actualiser le zoning
+els.refreshZoning?.addEventListener("click", () => {
+  loadZoningData();
+});
+
+// Enregistrer les affectations des communes
+els.saveZoningCommunes?.addEventListener("click", () => {
+  saveZoningCommunes();
+});
+// Enregistrer les affectations des utilisateurs
+els.saveZoningUsers?.addEventListener("click", () => {
+  saveZoningUsers();
+});
 els.historyDate.value = todayInputValue();
 
+// Filtres commerciaux
+els.applyZoningFilters?.addEventListener("click", () => {
+  renderZoningResults();
+});
+
+els.zoningZoneFilter?.addEventListener("change", () => {
+  renderZoningResults();
+});
+
+els.zoningUserFilter?.addEventListener("change", () => {
+  renderZoningResults();
+});
+
+els.zoningDateFilter?.addEventListener("change", () => {
+  renderZoningResults();
+});
+
+// Réinitialiser les filtres
+els.resetZoningFilters?.addEventListener("click", () => {
+  els.zoningZoneFilter.value = "";
+  els.zoningUserFilter.value = "";
+  els.zoningDateFilter.value = "";
+
+  renderZoningResults();
+});
