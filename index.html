@@ -214,6 +214,7 @@
                 <tr>
                   <th>Name</th>
                   <th>Username</th>
+                  <th>Commercial Type</th>
                   <th>Password</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -449,8 +450,8 @@
             <strong>Configuration territoriale</strong>
 
             <p>
-              Le territoire est organisé en trois zones commerciales :
-              Alger Est, Alger Ouest et Alger Centre.
+              Le territoire est organisé en cinq zones commerciales :
+              Zone 1, Zone 2, Zone 3, Zone 4 et Zone 5.
             </p>
 
             <p>
@@ -470,24 +471,38 @@
           <div class="stats-grid">
 
             <article class="stat-card">
-              <span>ALGER EST</span>
+              <span>ZONE 1</span>
               <strong id="zoning-est-communes-count">0</strong>
               <p>Communes affectées</p>
               <span id="zoning-est-users-count">0 utilisateur(s)</span>
             </article>
 
             <article class="stat-card">
-              <span>ALGER OUEST</span>
+              <span>Zone 2</span>
               <strong id="zoning-ouest-communes-count">0</strong>
               <p>Communes affectées</p>
               <span id="zoning-ouest-users-count">0 utilisateur(s)</span>
             </article>
 
             <article class="stat-card">
-              <span>ALGER CENTRE</span>
+              <span>Zone 3</span>
               <strong id="zoning-centre-communes-count">0</strong>
               <p>Communes affectées</p>
               <span id="zoning-centre-users-count">0 utilisateur(s)</span>
+            </article>
+
+            <article class="stat-card">
+              <span>ZONE 4</span>
+              <strong id="zoning-zone4-communes-count">0</strong>
+              <p>Communes affectées</p>
+              <span id="zoning-zone4-users-count">0 utilisateur(s)</span>
+            </article>
+
+            <article class="stat-card">
+              <span>ZONE 5</span>
+              <strong id="zoning-zone5-communes-count">0</strong>
+              <p>Communes affectées</p>
+              <span id="zoning-zone5-users-count">0 utilisateur(s)</span>
             </article>
 
           </div>
@@ -501,7 +516,7 @@
               <h2>1. Répartition des communes</h2>
 
               <p>
-                Affecter chaque commune à l'une des trois zones.
+                Affecter chaque commune à l'une des cinq zones.
               </p>
             </div>
 
@@ -510,7 +525,13 @@
             </button>
 
           </div>
-
+          <!-- Boutons des wilayas -->
+          <div id="zoning-wilayas" style="
+            display:flex;
+            flex-wrap:wrap;
+            gap:10px;
+            margin:20px 0;
+          "></div>
           <div class="table-wrap">
 
             <table>
@@ -603,9 +624,11 @@
 
               <select id="zoning-zone-filter">
                 <option value="">Toutes les zones</option>
-                <option value="alger_est">Alger Est</option>
-                <option value="alger_ouest">Alger Ouest</option>
-                <option value="alger_centre">Alger Centre</option>
+                <option value="alger_est">Zone 1</option>
+                <option value="alger_ouest">Zone 2</option>
+                <option value="alger_centre">Zone 3</option>
+                <option value="zone_4">Zone 4</option>
+                <option value="zone_5">Zone 5</option>
               </select>
 
             </label>
@@ -742,6 +765,13 @@
       <label>
         Password
         <input id="password" required />
+      </label>
+      <label>
+        Type de commercial
+        <select id="commercial-type" required>
+          <option value="terrain">Commercial terrain</option>
+          <option value="front_office">Commercial Front Office</option>
+        </select>
       </label>
 
       <menu>

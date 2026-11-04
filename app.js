@@ -168,10 +168,24 @@ if (ALGER_COMMUNES.length !== 57) {
 }
 // Configuration des zones commerciales
 const ZONING_ZONES = {
-  alger_est: "Alger Est",
-  alger_ouest: "Alger Ouest",
-  alger_centre: "Alger Centre"
+  alger_est: "Zone 1",
+  alger_ouest: "Zone 2",
+  alger_centre: "Zone 3",
+  zone_4: "Zone 4",
+  zone_5: "Zone 5"
 };
+const ZONING_WILAYAS = [
+  { code: "16", nom: "Alger" },
+  { code: "44", nom: "Aïn Defla" },
+  { code: "35", nom: "Boumerdès" },
+  { code: "09", nom: "Blida" },
+  { code: "42", nom: "Tipaza" },
+  { code: "31", nom: "Oran" },
+  { code: "19", nom: "Sétif" },
+  { code: "25", nom: "Constantine" }
+];
+
+let selectedZoningWilaya = null;
 
 // Document de configuration dans Firebase
 const ZONING_CONFIG_REF = [
@@ -189,6 +203,44 @@ let zoningLoading = false;
 // =====================================================
 
 async function loadZoningCommunes() {
+
+  const response = await fetch(
+    "./algeria-communes-58-wilayas.json"
+  );
+
+  if (!response.ok) {
+    throw new Error("Impossible de charger les communes");
+  }
+
+  const toutesCommunes = await response.json();
+
+  const wilayasAutorisees = ZONING_WILAYAS.map(
+    w => w.code
+  );
+
+  const nouvellesCommunes = toutesCommunes
+    .filter(c =>
+      wilayasAutorisees.includes(c.wilaya_code) &&
+      c.wilaya_code !== "16"
+    )
+    .map(c => ({
+      code: `${c.wilaya_code}-${String(c.id).padStart(2, "0")}`,
+      wilaya: ZONING_WILAYAS.find(
+        w => w.code === c.wilaya_code
+      ).nom,
+      wilayaCode: c.wilaya_code,
+      circonscription: c.daira_name_ascii,
+      commune: c.commune_name_ascii,
+      defaultZone: "",
+      zoneId: ""
+    }));
+
+  // Conserver les 57 communes et leurs anciens codes
+  const communesAlger = ALGER_COMMUNES.map(c => ({
+    ...c,
+    wilayaCode: "16"
+  }));
+
   const configRef = doc(db, ...ZONING_CONFIG_REF);
   const snapshot = await getDoc(configRef);
 
@@ -196,26 +248,71 @@ async function loadZoningCommunes() {
     ? snapshot.data().communes || {}
     : {};
 
-  zoningCommunes = ALGER_COMMUNES.map((commune) => ({
-    ...commune,
-    zoneId: ZONING_ZONES[savedZones[commune.code]]
-      ? savedZones[commune.code]
-      : commune.defaultZone
+  zoningCommunes = [
+    ...communesAlger,
+    ...nouvellesCommunes
+  ].map(c => ({
+    ...c,
+    zoneId: ZONING_ZONES[savedZones[c.code]]
+      ? savedZones[c.code]
+      : c.defaultZone
   }));
 }
-
 
 // =====================================================
 // AFFICHAGE DU TABLEAU DES COMMUNES
 // =====================================================
 
+function renderZoningWilayaButtons() {
+
+  const container =
+    document.getElementById("zoning-wilayas");
+
+  if (!container) return;
+
+  container.innerHTML = ZONING_WILAYAS.map(w => `
+    <button
+      type="button"
+      class="primary-button"
+      data-wilaya-code="${w.code}"
+      style="
+        padding:8px 14px;
+        opacity:${selectedZoningWilaya === w.code ? 1 : 0.65};
+      "
+    >
+      ${w.nom}
+    </button>
+  `).join("");
+
+  container.querySelectorAll("button").forEach(button => {
+
+    button.addEventListener("click", () => {
+
+      const code = button.dataset.wilayaCode;
+
+      selectedZoningWilaya =
+        selectedZoningWilaya === code ? null : code;
+
+      renderZoningWilayaButtons();
+      renderZoningCommunesTable();
+    });
+
+  });
+}
+
 function renderZoningCommunesTable() {
   if (!els.zoningCommunesTable) return;
 
-  els.zoningCommunesTable.innerHTML = zoningCommunes.map((item) => `
+  const communesAffichees = selectedZoningWilaya
+    ? zoningCommunes.filter(
+        item => item.wilayaCode === selectedZoningWilaya
+      )
+    : [];
+
+  els.zoningCommunesTable.innerHTML = communesAffichees.map((item) => `
     <tr>
       <td>${escapeHtml(item.code)}</td>
-      <td>Alger</td>
+      <td>${escapeHtml(item.wilaya)}</td>
       <td>${escapeHtml(item.circonscription)}</td>
       <td><strong>${escapeHtml(item.commune)}</strong></td>
       <td>
@@ -223,6 +320,10 @@ function renderZoningCommunesTable() {
           data-commune-code="${escapeHtml(item.code)}"
           class="zoning-zone-select"
         >
+          <option value="" ${!item.zoneId ? "selected" : ""}>
+            Non affectée
+          </option>
+
           ${Object.entries(ZONING_ZONES).map(([id, label]) => `
             <option
               value="${id}"
@@ -237,34 +338,64 @@ function renderZoningCommunesTable() {
   `).join("");
 }
 
+document
+  .getElementById("zoning-communes-table")
+  ?.addEventListener("change", (event) => {
+
+    const select = event.target.closest(
+      "select[data-commune-code]"
+    );
+
+    if (!select) return;
+
+    const commune = zoningCommunes.find(
+      c => c.code === select.dataset.communeCode
+    );
+
+    if (commune) {
+      commune.zoneId = select.value;
+    }
+
+  });
+
 
 // =====================================================
 // STATISTIQUES DES TROIS ZONES
 // =====================================================
 
 function renderZoningZoneStats() {
+
   const counts = {
     alger_est: 0,
     alger_ouest: 0,
-    alger_centre: 0
+    alger_centre: 0,
+    zone_4: 0,
+    zone_5: 0
   };
 
+  // Comptage des communes
   zoningCommunes.forEach((commune) => {
     if (counts[commune.zoneId] !== undefined) {
       counts[commune.zoneId]++;
     }
   });
 
+  // Affichage du nombre de communes
   els.zoningEstCommunesCount.textContent = counts.alger_est;
   els.zoningOuestCommunesCount.textContent = counts.alger_ouest;
   els.zoningCentreCommunesCount.textContent = counts.alger_centre;
-  // Nombre d'utilisateurs par zone
+  els.zoningZone4CommunesCount.textContent = counts.zone_4;
+  els.zoningZone5CommunesCount.textContent = counts.zone_5;
+
   const userCounts = {
     alger_est: 0,
     alger_ouest: 0,
-    alger_centre: 0
+    alger_centre: 0,
+    zone_4: 0,
+    zone_5: 0
   };
 
+  // Comptage des utilisateurs
   users.forEach((user) => {
     const zone = user.commercialZone || user.zoneId;
 
@@ -273,6 +404,7 @@ function renderZoningZoneStats() {
     }
   });
 
+  // Affichage du nombre d'utilisateurs
   els.zoningEstUsersCount.textContent =
     `${userCounts.alger_est} utilisateur(s)`;
 
@@ -281,6 +413,12 @@ function renderZoningZoneStats() {
 
   els.zoningCentreUsersCount.textContent =
     `${userCounts.alger_centre} utilisateur(s)`;
+
+  els.zoningZone4UsersCount.textContent =
+    `${userCounts.zone_4} utilisateur(s)`;
+
+  els.zoningZone5UsersCount.textContent =
+    `${userCounts.zone_5} utilisateur(s)`;
 }
 
 
@@ -413,50 +551,41 @@ async function saveZoningUsers() {
 
 
 async function saveZoningCommunes() {
-  const selects = [
-    ...els.zoningCommunesTable.querySelectorAll(
-      "select[data-commune-code]"
-    )
-  ];
 
-  if (selects.length !== 57) {
-    showToast("Erreur : les 57 communes ne sont pas chargées.");
+  if (zoningCommunes.length !== 276) {
+    showToast("Erreur : liste des communes incomplète.");
     return;
   }
 
   const assignments = {};
 
-  selects.forEach((select) => {
-    assignments[select.dataset.communeCode] = select.value;
+  zoningCommunes.forEach(commune => {
+    if (commune.zoneId && ZONING_ZONES[commune.zoneId]) {
+      assignments[commune.code] = commune.zoneId;
+    }
   });
 
   try {
+
     await setDoc(
       doc(db, ...ZONING_CONFIG_REF),
       {
         communes: assignments,
         updatedAt: serverTimestamp()
       },
-      { merge: true }
+      { mergeFields: ["communes", "updatedAt"] }
     );
-
-    zoningCommunes = zoningCommunes.map((commune) => ({
-      ...commune,
-      zoneId: assignments[commune.code]
-    }));
 
     renderZoningZoneStats();
 
     els.zoningStatus.textContent =
-      "Les affectations des 57 communes ont été enregistrées.";
+      "Les affectations des 8 wilayas ont été enregistrées.";
 
     showToast("Zoning enregistré avec succès.");
 
   } catch (error) {
-    console.error("Erreur sauvegarde Zoning :", error);
 
-    els.zoningStatus.textContent =
-      "Erreur d'enregistrement : " + error.message;
+    console.error("Erreur sauvegarde Zoning :", error);
 
     showToast("Erreur Firebase : " + error.message);
   }
@@ -487,6 +616,55 @@ const ZONING_COMMUNE_ALIASES = {
 function zoningCommuneKey(value) {
   const key = normalizeZoningText(value);
   return ZONING_COMMUNE_ALIASES[key] || key;
+}
+
+function zoningWilayaCode(value) {
+
+  const raw = String(value ?? "").trim();
+
+  // Reconnaître "16 - Alger", "09 - Blida", etc.
+  const match = raw.match(/^(\d{1,2})\s*[-–—]/);
+
+  if (match) {
+    const code = match[1].padStart(2, "0");
+
+    if (ZONING_WILAYAS.some(w => w.code === code)) {
+      return code;
+    }
+  }
+
+  const key = normalizeZoningText(raw);
+
+  const aliases = {
+    "الجزائر": "16",
+    "عينالدفلى": "44",
+    "بومرداس": "35",
+    "البليدة": "09",
+    "تيبازة": "42",
+    "وهران": "31",
+    "سطيف": "19",
+    "قسنطينة": "25"
+  };
+
+  if (aliases[key]) {
+    return aliases[key];
+  }
+
+  const wilaya = ZONING_WILAYAS.find(w =>
+    w.code === key ||
+    normalizeZoningText(w.nom) === key
+  );
+
+  if (wilaya) {
+    return wilaya.code;
+  }
+
+  // Compatibilité avec les anciens rapports sans wilaya
+  if (!key) {
+    return "16";
+  }
+
+  return "";
 }
 
 function zoningIsAlgerWilaya(value) {
@@ -629,13 +807,16 @@ async function loadZoningReports() {
         visit.commune ?? data.commune ?? ""
       ).trim();
 
-      if (!zoningIsAlgerWilaya(wilaya)) return;
+      const wilayaCode = zoningWilayaCode(wilaya);
+        if (!wilayaCode) return;
 
-      const communeKey = zoningCommuneKey(communeName);
+        const communeKey = zoningCommuneKey(communeName);
 
-      const commune = ALGER_COMMUNES.find(
-        (item) => zoningCommuneKey(item.commune) === communeKey
-      );
+        const commune = zoningCommunes.find(
+          item =>
+            item.wilayaCode === wilayaCode &&
+            zoningCommuneKey(item.commune) === communeKey
+        );
 
       if (!commune) return;
 
@@ -682,6 +863,21 @@ async function loadZoningReports() {
   });
 
   zoningReportRows = rows;
+  console.log("=== RESULTAT CHARGEMENT ZONING ===");
+  console.log(
+    "Documents Firebase lus :",
+    snapshot.docs.length
+  );
+
+  console.log(
+    "Visites reconnues :",
+    zoningReportRows.length
+  );
+
+  console.log(
+    "Utilisateurs trouvés dans les rapports :",
+    [...new Set(zoningReportRows.map(r => r.username))]
+  );
 }
 
 
@@ -695,6 +891,32 @@ function renderZoningResults() {
   const zoneFilter = els.zoningZoneFilter.value;
   const userFilter = els.zoningUserFilter.value;
   const dateFilter = els.zoningDateFilter.value;
+  console.log("=== DIAGNOSTIC ZONING ===");
+
+  console.log("Nombre de communes :", zoningCommunes.length);
+
+  console.log("Nombre de rapports chargés :", zoningReportRows.length);
+
+  console.log("Zone sélectionnée :", zoneFilter);
+
+  console.log("Utilisateur sélectionné :", userFilter);
+
+  console.log("Date sélectionnée :", dateFilter);
+
+  console.table(
+    zoningReportRows.slice(0, 10).map(report => {
+      const commune = zoningCommunes.find(
+        c => c.code === report.communeCode
+      );
+
+      return {
+        utilisateur: report.username,
+        commune: report.commune,
+        zone: commune?.zoneId || "Non affectée",
+        date: report.dateValue
+      };
+    })
+  );
 
   const filtered = zoningReportRows.filter((report) => {
     const commune = zoningCommunes.find(
@@ -704,7 +926,8 @@ function renderZoningResults() {
     const zoneId = commune?.zoneId ?? commune?.defaultZone ?? "";
 
     return (!zoneFilter || zoneId === zoneFilter)
-      && (!userFilter || report.username === userFilter)
+      && (!userFilter || String(report.username ?? "").trim().toLowerCase() ===
+      String(userFilter).trim().toLowerCase())
       && (!dateFilter || report.dateValue === dateFilter);
   });
 
@@ -823,6 +1046,7 @@ async function loadZoningData() {
   try {
     // 1. Charger les communes et leurs zones
     await loadZoningCommunes();
+    renderZoningWilayaButtons();
 
     // 2. Afficher les communes
     renderZoningCommunesTable();
@@ -893,6 +1117,7 @@ const els = {
   lastName: document.querySelector("#last-name"),
   username: document.querySelector("#username"),
   password: document.querySelector("#password"),
+  commercialType: document.querySelector("#commercial-type"),
   cancelUser: document.querySelector("#cancel-user"),
   mapUserSelect: document.querySelector("#map-user-select"),
   historyDate: document.querySelector("#history-date"),
@@ -922,10 +1147,14 @@ zoningStatus: document.querySelector("#zoning-status"),
 zoningEstCommunesCount: document.querySelector("#zoning-est-communes-count"),
 zoningOuestCommunesCount: document.querySelector("#zoning-ouest-communes-count"),
 zoningCentreCommunesCount: document.querySelector("#zoning-centre-communes-count"),
+zoningZone4CommunesCount: document.querySelector("#zoning-zone4-communes-count"),
+zoningZone5CommunesCount: document.querySelector("#zoning-zone5-communes-count"),
 
 zoningEstUsersCount: document.querySelector("#zoning-est-users-count"),
 zoningOuestUsersCount: document.querySelector("#zoning-ouest-users-count"),
 zoningCentreUsersCount: document.querySelector("#zoning-centre-users-count"),
+zoningZone4UsersCount: document.querySelector("#zoning-zone4-users-count"),
+zoningZone5UsersCount: document.querySelector("#zoning-zone5-users-count"),
 
 saveZoningCommunes: document.querySelector("#save-zoning-communes"),
 zoningCommunesTable: document.querySelector("#zoning-communes-table"),
@@ -1097,7 +1326,7 @@ function renderUsers() {
   els.usersTable.innerHTML = "";
   if (!users.length) {
     const row = document.createElement("tr");
-    row.innerHTML = `<td colspan="5">No users found.</td>`;
+    row.innerHTML = `<td colspan="6">No users found.</td>`;
     els.usersTable.append(row);
     return;
   }
@@ -1108,6 +1337,7 @@ function renderUsers() {
     row.innerHTML = `
       <td>${escapeHtml(user.Firstname ?? "")} ${escapeHtml(user.Lastname ?? "")}</td>
       <td>${escapeHtml(user.username ?? user.id)}</td>
+      <td>${user.commercialType === "front_office"? "🏢 Front Office": "📍 Field Sales"}</td>
       <td>${escapeHtml(user.password ?? "")}</td>
       <td>
         <span class="status-pill ${online ? "online" : ""}">
@@ -1855,6 +2085,7 @@ function openUserModal(user = null) {
   els.lastName.value = user?.Lastname ?? "";
   els.username.value = user?.username ?? "";
   els.password.value = user?.password ?? "";
+  els.commercialType.value = user?.commercialType ?? "terrain";
   els.userModal.showModal();
 }
 
@@ -1868,6 +2099,7 @@ async function saveUser(event) {
     Lastname: els.lastName.value.trim(),
     username,
     password: els.password.value,
+    commercialType: els.commercialType.value,
     isConnected: users.find((user) => user.username === editingUsername)?.isConnected ?? false,
     updatedAt: serverTimestamp(),
   };
