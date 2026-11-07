@@ -761,6 +761,21 @@
         Username
         <input id="username" required />
       </label>
+      
+      <label>
+        Téléphone de l'utilisateur
+        <input
+          id="user-phone"
+          type="tel"
+          inputmode="numeric"
+          placeholder="05XXXXXXXX ou 02XXXXXXX"
+          maxlength="10"
+          pattern="(0[567][0-9]{8}|02[0-9]{7})"
+          title="Mobile : 10 chiffres (05/06/07), fixe : 9 chiffres (02)"
+          required
+        />
+      </label>
+
 
       <label>
         Password

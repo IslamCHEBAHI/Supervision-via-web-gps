@@ -1114,6 +1114,7 @@ const els = {
   userModalTitle: document.querySelector("#user-modal-title"),
   editingUsername: document.querySelector("#editing-username"),
   firstName: document.querySelector("#first-name"),
+  userPhone: document.querySelector("#user-phone"),
   lastName: document.querySelector("#last-name"),
   username: document.querySelector("#username"),
   password: document.querySelector("#password"),
@@ -1661,12 +1662,23 @@ async function loadAllReports() {
       if (selectedDate && toDateInputValue(reportDate) !== selectedDate) {
         return [];
       }
+      const currentUser = users.find(
+        (user) => user.username === data.username
+      );
+
       const base = {
         id: item.id,
-        userFullName: String(data.userFullName ?? `${data.firstname ?? ""} ${data.lastname ?? ""}`.trim()),
+        userFullName: String(
+          data.userFullName ??
+          `${data.firstname ?? ""} ${data.lastname ?? ""}`.trim()
+        ),
         username: String(data.username ?? ""),
+        userPhone: String(
+          data.userPhone || currentUser?.phone || ""
+        ),
         reportDate,
       };
+
       const visits = Array.isArray(data.visits) && data.visits.length ? data.visits : [{
         clientName: data.clientName,
         clientType: data.clientType,
@@ -1874,6 +1886,15 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
           vertical-align: middle;
           mso-number-format: General;
         }
+        
+        .report-info {
+          font-size: 16px;
+          font-weight: bold;
+          text-align: left;
+          padding: 14px;
+          background: #f1f5f9;
+          color: #172b4d;
+        }
 
         th {
           background: #172b4d;
@@ -1890,9 +1911,28 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
         <tr><td colspan="9" class="title">
           RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE
         </td></tr>
-        <tr><td colspan="9">Utilisateur : ${escapeHtml(meta.userFullName)}</td></tr>
-        <tr><td colspan="9">Username : ${escapeHtml(meta.username)}</td></tr>
-        <tr><td colspan="9">Date : ${escapeHtml(meta.reportDate)}</td></tr>
+        
+        <tr>
+          <td colspan="9" class="report-info">
+            Utilisateur : ${escapeHtml(meta.userFullName)}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="9" class="report-info">
+            Username : ${escapeHtml(meta.username)}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="9" class="report-info">
+            Téléphone : ${escapeHtml(meta.userPhone)}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="9" class="report-info">
+            Date : ${escapeHtml(meta.reportDate)}
+          </td>
+        </tr>
+
         <tr>
           <th>Client</th>
           <th>Type client</th>
@@ -1924,6 +1964,8 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
   URL.revokeObjectURL(url);
 
   showToast("Fichier Excel telecharge");
+
+  
 }
 
 
@@ -1953,17 +1995,42 @@ function exportReportToPdf(reportId) {
   win.print();
 }
 
+
 function buildReportMeta(rows) {
-  const users = new Set(rows.map((report) => report.userFullName || "").filter(Boolean));
-  const usernames = new Set(rows.map((report) => report.username || "").filter(Boolean));
-  const dates = new Set(rows.map((report) => formatDateOnly(report.reportDate)).filter(Boolean));
+  const userNames = new Set(
+    rows.map(r => r.userFullName || "").filter(Boolean)
+  );
+
+  const usernames = new Set(
+    rows.map(r => r.username || "").filter(Boolean)
+  );
+
+  const phones = new Set(
+    rows.map(r => r.userPhone || "").filter(Boolean)
+  );
+
+  const dates = new Set(
+    rows.map(r => formatDateOnly(r.reportDate)).filter(Boolean)
+  );
 
   return {
-    userFullName: users.size === 1 ? Array.from(users)[0] : "Tous les utilisateurs",
-    username: usernames.size === 1 ? Array.from(usernames)[0] : "Plusieurs usernames",
-    reportDate: dates.size === 1 ? Array.from(dates)[0] : "Plusieurs dates",
+    userFullName: userNames.size === 1
+      ? [...userNames][0] : "Tous les utilisateurs",
+
+    username: usernames.size === 1
+      ? [...usernames][0] : "Plusieurs usernames",
+
+    userPhone: phones.size === 1
+      ? [...phones][0]
+      : phones.size > 1
+        ? "Plusieurs numéros"
+        : "Non renseigné",
+
+    reportDate: dates.size === 1
+      ? [...dates][0] : "Plusieurs dates",
   };
 }
+
 
 
 function buildPrintableReportHtml(rows) {
@@ -2006,11 +2073,24 @@ function buildPrintableReportHtml(rows) {
         border-bottom:5px solid #e57b18;
       }
       h1 {font-size:21px;margin:0}
+      
       .meta {
-        display:grid;grid-template-columns:repeat(3,1fr);
-        gap:10px;margin:15px 0;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin: 18px 0;
       }
-      .meta div {background:#f1f5f9;padding:12px;border:1px solid #cbd5e1}
+
+      .meta div {
+        background: #f1f5f9;
+        padding: 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 5px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #172b4d;
+      }
+
       table {width:100%;border-collapse:collapse;margin-bottom:18px}
       th {background:#172b4d;color:white}
       th,td {border:1px solid #cbd5e1;padding:7px;text-align:left}
@@ -2033,11 +2113,29 @@ function buildPrintableReportHtml(rows) {
       <p>Suivi des visites et des bons d'achat</p>
     </header>
 
+    
     <div class="meta">
-      <div>Utilisateur : <strong>${escapeHtml(meta.userFullName)}</strong></div>
-      <div>Username : <strong>${escapeHtml(meta.username)}</strong></div>
-      <div>Date : <strong>${escapeHtml(meta.reportDate)}</strong></div>
+      <div>
+        Utilisateur :
+        <strong>${escapeHtml(meta.userFullName)}</strong>
+      </div>
+
+      <div>
+        Username :
+        <strong>${escapeHtml(meta.username)}</strong>
+      </div>
+
+      <div>
+        Téléphone :
+        <strong>${escapeHtml(meta.userPhone)}</strong>
+      </div>
+
+      <div>
+        Date :
+        <strong>${escapeHtml(meta.reportDate)}</strong>
+      </div>
     </div>
+
 
     <h2>1. Informations des visites</h2>
     <table>
@@ -2083,6 +2181,7 @@ function openUserModal(user = null) {
   els.userModalTitle.textContent = user ? "Edit user" : "Create user";
   els.firstName.value = user?.Firstname ?? "";
   els.lastName.value = user?.Lastname ?? "";
+  els.userPhone.value = user?.phone ?? "";
   els.username.value = user?.username ?? "";
   els.password.value = user?.password ?? "";
   els.commercialType.value = user?.commercialType ?? "terrain";
@@ -2097,12 +2196,23 @@ async function saveUser(event) {
   const userData = {
     Firstname: els.firstName.value.trim(),
     Lastname: els.lastName.value.trim(),
+    phone: els.userPhone.value.trim(),
     username,
     password: els.password.value,
     commercialType: els.commercialType.value,
     isConnected: users.find((user) => user.username === editingUsername)?.isConnected ?? false,
     updatedAt: serverTimestamp(),
   };
+  
+  const userPhoneRegex = /^(0[567][0-9]{8}|02[0-9]{7})$/;
+
+  if (!userPhoneRegex.test(userData.phone)) {
+    showToast(
+      "Téléphone invalide : mobile 05/06/07 (10 chiffres) ou fixe 02 (9 chiffres)"
+    );
+    return;
+  }
+
 
   if (!userData.Firstname || !userData.Lastname || !userData.username || !userData.password) {
     showToast("Veuillez remplir tous les champs");
