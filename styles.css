@@ -1051,3 +1051,91 @@ menu {
     }
 }
 
+
+/* Affichage compact des bons d'achat dans les rapports */
+
+.bon-achat-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 125px;
+  padding: 5px 7px;
+  margin: 2px 0;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.bon-achat-status {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bon-achat-status.oui {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.bon-achat-status.non {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.bon-achat-montant {
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+
+/* Séparation des visites dans un même rapport journalier */
+
+#reports-table tr.report-visit-row > td {
+    border-bottom: 2px solid #cbd5e1;
+    padding: 14px 12px;
+    vertical-align: middle;
+}
+
+/* Début d'un groupe de visites */
+#reports-table tr.report-visit-first > td {
+    border-top: 2px solid #64748b;
+}
+
+/* Fin du groupe de visites */
+#reports-table tr.report-visit-last > td {
+    border-bottom: 3px solid #64748b;
+}
+
+/* Informations communes au rapport */
+#reports-table td.report-shared-cell {
+    background: #f1f5f9;
+    vertical-align: middle;
+    font-weight: 600;
+    border-right: 1px solid #d7e0ea;
+}
+
+/* Contenu des visites */
+#reports-table td.report-visit-content {
+    min-width: 150px;
+    white-space: normal;
+    line-height: 1.6;
+    vertical-align: top;
+}
+
+/* Séparation visuelle des visites */
+#reports-table tr.report-visit-row:nth-child(even) {
+    background: #f8fafc;
+}
+
+
+/* Augmenter la largeur de la colonne Observation */
+#reports-table td.observation-cell {
+    min-width: 350px;
+    width: 350px;
+    white-space: normal;
+    line-height: 1.6;
+    vertical-align: top;
+}
