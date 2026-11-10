@@ -1,4 +1,4 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   collection,
   deleteDoc,
@@ -1121,6 +1121,7 @@ const els = {
   commercialType: document.querySelector("#commercial-type"),
   cancelUser: document.querySelector("#cancel-user"),
   mapUserSelect: document.querySelector("#map-user-select"),
+  mapClientUserFilter: document.querySelector("#map-client-user-filter"),
   historyDate: document.querySelector("#history-date"),
   historyStart: document.querySelector("#history-start"),
   historyEnd: document.querySelector("#history-end"),
@@ -1282,6 +1283,7 @@ function startUsersListener() {
       renderUsers();
       renderStats();
       renderMapUserSelect();
+      renderMapClientUserFilter();
       renderClientsUserFilter();
       renderReportsUserFilter();
       if (selectedView === "map") {
@@ -1305,6 +1307,7 @@ async function refreshUsersOnce() {
   renderUsers();
   renderStats();
   renderMapUserSelect();
+  renderMapClientUserFilter();
   renderClientsUserFilter();
   renderReportsUserFilter();
   if (selectedView === "clients") {
@@ -1372,6 +1375,29 @@ function renderMapUserSelect() {
   }
 }
 
+function renderMapClientUserFilter() {
+  const selected = els.mapClientUserFilter.value;
+
+  els.mapClientUserFilter.innerHTML =
+    `<option value="">Tous les commerciaux</option>`;
+
+  users.forEach((user) => {
+    const username = user.username ?? user.id;
+
+    const option = document.createElement("option");
+    option.value = username;
+    option.textContent = userLabel(user);
+
+    els.mapClientUserFilter.append(option);
+  });
+
+  if (users.some(
+    (user) => (user.username ?? user.id) === selected
+  )) {
+    els.mapClientUserFilter.value = selected;
+  }
+}
+
 function renderClientsUserFilter() {
   const selected = els.clientsUserFilter.value;
   els.clientsUserFilter.innerHTML = `<option value="">Tous les utilisateurs</option>`;
@@ -1429,7 +1455,7 @@ async function loadAllClients() {
           name: String(data.clientName ?? data.label ?? "Client"),
           type: String(data.type ?? "Non defini"),
           userLabel: creatorName || username,
-          username: String(data.username ?? username),
+          phone: String(data.phone ?? data.clientPhone ?? ""),
           latitude,
           longitude,
           createdAt,
@@ -1473,7 +1499,7 @@ function renderClientsTable(isLoading = false) {
       <td>${escapeHtml(client.name)}</td>
       <td>${escapeHtml(client.type)}</td>
       <td>${escapeHtml(client.userLabel)}</td>
-      <td>${escapeHtml(client.username)}</td>
+      <td>${escapeHtml(client.phone || "Non renseigné")}</td>
       <td>${client.latitude.toFixed(6)}</td>
       <td>${client.longitude.toFixed(6)}</td>
       <td>${escapeHtml(formatDateTime(client.createdAt))}</td>
@@ -1493,7 +1519,7 @@ function exportClientsToExcel() {
       <td>${escapeHtml(client.name)}</td>
       <td>${escapeHtml(client.type)}</td>
       <td>${escapeHtml(client.userLabel)}</td>
-      <td>${escapeHtml(client.username)}</td>
+      <td>${escapeHtml(client.phone || "Non renseigné")}</td>
       <td>${client.latitude.toFixed(6)}</td>
       <td>${client.longitude.toFixed(6)}</td>
       <td>${escapeHtml(formatDateTime(client.createdAt))}</td>
@@ -1510,7 +1536,7 @@ function exportClientsToExcel() {
               <th>Nom</th>
               <th>Type</th>
               <th>Utilisateur</th>
-              <th>Username</th>
+              <th>Téléphone client</th>
               <th>Latitude</th>
               <th>Longitude</th>
               <th>Date</th>
@@ -1578,6 +1604,7 @@ function normalizeGamme(value) {
 // Affichage de toutes les gammes avec une croix
 // devant celles achetées par le client.
 
+
 function renderBonAchatCell(report) {
   const bonAchat = String(report.bonAchat || "Non").trim();
   const montant = Number(
@@ -1593,54 +1620,18 @@ function renderBonAchatCell(report) {
   const achatEffectue = bonAchat === "Oui";
 
   return `
-    <div style="
-      min-width:150px;
-      padding:10px;
-      border:1px solid #e2e8f0;
-      border-radius:8px;
-      background:#ffffff;
-      text-align:left;
-    ">
-      <div style="
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        margin-bottom:10px;
-      ">
-        <strong>Bon d'achat</strong>
+    <div class="bon-achat-compact">
+      <span class="bon-achat-status ${achatEffectue ? "oui" : "non"}">
+        ${achatEffectue ? "OUI" : "NON"}
+      </span>
 
-        <span style="
-          padding:4px 9px;
-          border-radius:20px;
-          font-size:11px;
-          font-weight:bold;
-          color:${achatEffectue ? '#166534' : '#991b1b'};
-          background:${achatEffectue ? '#dcfce7' : '#fee2e2'};
-        ">
-          ${achatEffectue ? "OUI" : "NON"}
-        </span>
-      </div>
-
-      <div style="
-        padding-top:8px;
-        border-top:1px solid #e2e8f0;
-        color:#475569;
-        font-size:12px;
-      ">
-        Total du bon d'achat
-      </div>
-
-      <div style="
-        margin-top:5px;
-        font-size:17px;
-        font-weight:800;
-        color:#0f766e;
-      ">
+      <strong class="bon-achat-montant">
         ${montantFormate} DA
-      </div>
+      </strong>
     </div>
   `;
 }
+
 
 
 async function loadAllReports() {
@@ -1746,35 +1737,89 @@ function renderReportsTable(isLoading = false) {
     return;
   }
 
+  
   reportGroups.forEach((group) => {
     const report = group.rows[0];
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${escapeHtml(formatDateOnly(report.reportDate))}</td>
-      <td>${escapeHtml(report.userFullName)}</td>
-      <td>${escapeHtml(report.username)}</td>
-      <td>${group.rows.map((item) => `<strong>${escapeHtml(item.clientName)}</strong>`).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.clientType)).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.activityType)).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.phone)).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.wilaya)).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.commune)).join("<br>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.interestedProducts).replaceAll("\n", "<br>")).join("<hr>")}</td>
-      <td>${group.rows.map(item => renderBonAchatCell(item)).join("<hr>")}</td>
-      <td>${group.rows.map((item) => escapeHtml(item.observation).replaceAll("\n", "<br>")).join("<hr>")}</td>
-      <td>
-        <div class="row-actions">
-          <button class="edit-button" data-action="excel">Excel</button>
-          <button class="pdf-button" data-action="pdf">PDF</button>
-          <button class="delete-button" data-action="delete">Supprimer</button>
-        </div>
-      </td>
-    `;
-    row.querySelector('[data-action="excel"]').addEventListener("click", () => exportReportToExcel(report.id));
-    row.querySelector('[data-action="pdf"]').addEventListener("click", () => exportReportToPdf(report.id));
-    row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteReport(report));
-    els.reportsTable.append(row);
+    const multipleVisits = group.rows.length > 1;
+    const rowSpan = group.rows.length;
+
+    group.rows.forEach((item, index) => {
+      const row = document.createElement("tr");
+
+      row.className = multipleVisits
+        ? "report-visit-row"
+        : "";
+
+      if (multipleVisits && index === 0) {
+        row.classList.add("report-visit-first");
+      }
+
+      if (multipleVisits && index === rowSpan - 1) {
+        row.classList.add("report-visit-last");
+      }
+
+      const sharedCells = index === 0 ? `
+        <td rowspan="${rowSpan}" class="report-shared-cell">
+          ${escapeHtml(formatDateOnly(report.reportDate))}
+        </td>
+        <td rowspan="${rowSpan}" class="report-shared-cell">
+          ${escapeHtml(report.userFullName)}
+        </td>
+        <td rowspan="${rowSpan}" class="report-shared-cell">
+          ${escapeHtml(report.username)}
+        </td>
+      ` : "";
+
+      const actionCell = index === 0 ? `
+        <td rowspan="${rowSpan}" class="report-shared-cell">
+          <div class="row-actions">
+            <button class="edit-button" data-action="excel">Excel</button>
+            <button class="pdf-button" data-action="pdf">PDF</button>
+            <button class="delete-button" data-action="delete">Supprimer</button>
+          </div>
+        </td>
+      ` : "";
+
+      row.innerHTML = `
+        ${sharedCells}
+
+        <td><strong>${escapeHtml(item.clientName)}</strong></td>
+        <td>${escapeHtml(item.clientType)}</td>
+        <td>${escapeHtml(item.activityType)}</td>
+        <td>${escapeHtml(item.phone)}</td>
+        <td>${escapeHtml(item.wilaya)}</td>
+        <td>${escapeHtml(item.commune)}</td>
+
+        <td class="report-visit-content">
+          ${escapeHtml(item.interestedProducts || "").replace(/\r\n|\r|\n/g, "<br>")}
+        </td>
+
+        <td class="report-visit-content">
+          ${renderBonAchatCell(item)}
+        </td>
+
+        <td class="report-visit-content observation-cell">
+          ${escapeHtml(item.observation || "").replace(/\r\n|\r|\n/g, "<br>")}
+        </td>
+
+        ${actionCell}
+      `;
+
+      if (index === 0) {
+        row.querySelector('[data-action="excel"]')
+          .addEventListener("click", () => exportReportToExcel(report.id));
+
+        row.querySelector('[data-action="pdf"]')
+          .addEventListener("click", () => exportReportToPdf(report.id));
+
+        row.querySelector('[data-action="delete"]')
+          .addEventListener("click", () => deleteReport(report));
+      }
+
+      els.reportsTable.append(row);
+    });
   });
+
 }
 
 function groupReportsById(rows) {
@@ -1861,9 +1906,17 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
       <td>${escapeHtml(report.phone)}</td>
       <td>${escapeHtml(report.wilaya)}</td>
       <td>${escapeHtml(report.commune)}</td>
-      <td>${escapeHtml(report.interestedProducts)}</td>
+      <td class="multiline-cell">
+        ${escapeHtml(report.interestedProducts || "")
+          .replace(/\r\n|\r|\n/g, '<br style="mso-data-placement:same-cell;">')}
+      </td>
+
       <td>${renderPurchaseExport(report)}</td>
-      <td>${escapeHtml(report.observation)}</td>
+
+      <td class="multiline-cell">
+        ${escapeHtml(report.observation || "")
+          .replace(/\r\n|\r|\n/g, '<br style="mso-data-placement:same-cell;">')}
+      </td>
     </tr>
   `).join("");
 
@@ -1904,6 +1957,18 @@ async function exportReportsToExcel(rows = reportRows, filename = "rapports_jour
           vertical-align: middle;
         }
         .title {background:#172b4d;color:white;font-size:22px;font-weight:bold}
+
+        .multiline-cell {
+          white-space: pre-line;
+          text-align: left;
+          vertical-align: middle;
+          mso-data-placement: same-cell;
+          min-width: 220px;
+          padding: 8px;
+          line-height: 1.6;
+          word-wrap: break-word;
+        }
+
       </style>
     </head>
     <body>
@@ -2360,17 +2425,46 @@ async function loadHealthcarePlaces(lat, lon) {
 }
 
 async function loadUserPinnedPlaces(selectedUser) {
+
+  function getUserMarkerColor(userId) {
+    const colors = [
+      "#e53935", // Rouge
+      "#1565c0", // Bleu
+      "#2e7d32", // Vert
+      "#8e24aa", // Violet
+      "#ef6c00", // Orange
+      "#00838f", // Turquoise
+      "#d81b60", // Rose
+      "#5e35b1", // Indigo
+      "#827717", // Olive
+      "#6d4c41", // Marron
+      "#3949ab", // Bleu foncé
+      "#00897b"  // Vert turquoise
+    ];
+
+    const key = String(userId || "unknown");
+    let hash = 0;
+
+    for (let i = 0; i < key.length; i++) {
+      hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+    }
+
+    return colors[hash % colors.length];
+  }
+
   if (!pinnedPlacesLayer) return [];
 
   pinnedPlacesLayer.clearLayers();
   const latLngs = [];
-  const userIds = users
+  const selectedClientUser = els.mapClientUserFilter.value;
+
+  const allUserIds = users
     .map((user) => user.username ?? user.id)
     .filter(Boolean);
 
-  if (selectedUser && !userIds.includes(selectedUser)) {
-    userIds.push(selectedUser);
-  }
+  const userIds = selectedClientUser
+    ? allUserIds.filter((id) => id === selectedClientUser)
+    : allUserIds;
 
   for (const userId of userIds) {
     const user = users.find((item) => (item.username ?? item.id) === userId) ?? {};
@@ -2404,10 +2498,12 @@ async function loadUserPinnedPlaces(selectedUser) {
         Longitude : ${lon.toFixed(6)}
       `;
 
+      const markerColor = getUserMarkerColor(userId);
+
       L.circleMarker([lat, lon], {
         radius: 9,
-        color: "#1d4ed8",
-        fillColor: "#60a5fa",
+        color: markerColor,
+        fillColor: markerColor,
         fillOpacity: 0.95,
         weight: 3,
       })
@@ -2663,6 +2759,10 @@ document.addEventListener("fullscreenchange", updateFullscreenButton);
 els.mapUserSelect.addEventListener("change", () => {
   stopTracking();
   clearRouteLayers();
+});
+
+els.mapClientUserFilter.addEventListener("change", () => {
+  loadUserPinnedPlaces();
 });
 
 els.navButtons.forEach((button) => {
