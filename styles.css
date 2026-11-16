@@ -474,6 +474,16 @@ th {
   align-items: end;
   gap: 10px;
 }
+#clients-name-search {
+  width: 180px;
+  min-width: 150px;
+  height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+#refresh-zoning {
+  margin-left: auto;
+}
 
 .map-shell {
   position: relative;
@@ -742,8 +752,9 @@ menu {
 
 /* Cartes des trois zones */
 #zoning-section > .stats-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
   margin: 20px 0;
 }
 
