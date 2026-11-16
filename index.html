@@ -320,6 +320,15 @@
             </div>
 
             <div class="clients-actions">
+              <label>
+                Recherche client
+                <input
+                  type="search"
+                  id="clients-name-search"
+                  placeholder="Nom du client..."
+                  autocomplete="off"
+                />
+              </label>
 
               <label>
                 Utilisateur
@@ -435,14 +444,6 @@
 
           <div class="section-toolbar clients-toolbar">
 
-            <div>
-              <h2>Zoning commercial — Wilaya d'Alger</h2>
-
-              <p>
-                Organisation territoriale des utilisateurs et des activités commerciales.
-              </p>
-            </div>
-
             <button id="refresh-zoning" class="secondary-button">
               Actualiser le Zoning
             </button>
@@ -461,20 +462,13 @@
               Zone 1, Zone 2, Zone 3, Zone 4 et Zone 5.
             </p>
 
-            <p>
-              Les noms officiels des communes sont conservés.
-              Seule leur affectation à une zone commerciale peut être modifiée.
-            </p>
-
             <p id="zoning-status" role="status" aria-live="polite">
               Chargement de la configuration...
             </p>
 
           </div>
 
-
           <!-- LES TROIS ZONES -->
-
           <div class="stats-grid">
 
             <article class="stat-card">
@@ -642,18 +636,26 @@
 
             <label>
               Utilisateur
-
               <select id="zoning-user-filter">
                 <option value="">Tous les utilisateurs</option>
               </select>
+            </label>
 
+            <label>
+              Commune (Alger)
+              <input
+                type="text"
+                id="zoning-commune-filter"
+                list="zoning-communes-options"
+                placeholder="Saisir 2 lettres..."
+                autocomplete="off"
+              />
+              <datalist id="zoning-communes-options"></datalist>
             </label>
 
             <label>
               Date
-
               <input id="zoning-date-filter" type="date" />
-
             </label>
 
             <button id="apply-zoning-filters" class="secondary-button">
