@@ -114,6 +114,9 @@
           <button class="nav-button" data-view="zoning">
             Zoning commercial
           </button>
+          <button class="nav-button" data-view="clientAnalysis">
+            Analyse clientèle
+          </button>
 
         </nav>
 
@@ -189,6 +192,9 @@
 
             <button class="action-card blue" data-view-target="zoning">
               Zoning commercial
+            </button>
+            <button class="action-card teal" data-view-target="clientAnalysis">
+              Analyse clientèle
             </button>
 
           </div>
@@ -336,6 +342,12 @@
                   <option value="">Tous les utilisateurs</option>
                 </select>
               </label>
+              <label>
+                Type de client
+                <select id="clients-type-filter">
+                  <option value="">Tous les types de clients</option>
+                </select>
+              </label>
 
               <button id="refresh-clients" class="secondary-button">
                 Refresh
@@ -413,7 +425,6 @@
                 <tr>
                   <th>Date</th>
                   <th>Utilisateur</th>
-                  <th>Username</th>
                   <th>Client</th>
                   <th>Type client</th>
                   <th>Activité</th>
@@ -422,6 +433,7 @@
                   <th>Commune</th>
                   <th>Produits</th>
                   <th>Bon d'achat / Gammes achetées</th>
+                  <th>Recouvrement</th>
                   <th>Observation</th>
                   <th>Actions</th>
                 </tr>
@@ -654,8 +666,19 @@
             </label>
 
             <label>
-              Date
-              <input id="zoning-date-filter" type="date" />
+              Date début
+              <input
+                id="zoning-date-from"
+                type="date"
+              />
+            </label>
+
+            <label>
+              Date fin
+              <input
+                id="zoning-date-to"
+                type="date"
+              />
             </label>
 
             <button id="apply-zoning-filters" class="secondary-button">
@@ -738,6 +761,138 @@
           </div>
 
         </section>
+          <!-- ========================================= -->
+          <!--             ANALYSE CLIENTÈLE             -->
+          <!-- ========================================= -->
+
+          <section id="client-analysis-section" class="view-section hidden">
+
+            <div class="section-toolbar">
+              <button id="export-client-analysis-pdf" class="pdf-button">
+                Exporter PDF
+              </button>
+            </div>
+
+            <!-- FILTRES -->
+
+            <div class="map-controls client-analysis-filters">
+
+              <label>
+                Utilisateur
+                <select id="analysis-user-filter">
+                  <option value="">Tous les utilisateurs</option>
+                </select>
+              </label>
+
+              <label>
+                Type de client
+                <select id="analysis-type-filter">
+                  <option value="">Tous les types de clients</option>
+                </select>
+              </label>
+
+              <label>
+                Date début
+                <input type="date" id="analysis-date-from">
+              </label>
+
+              <label>
+                Date fin
+                <input type="date" id="analysis-date-to">
+              </label>
+
+              <div class="button-row">
+                <button id="refresh-client-analysis" class="secondary-button">
+                  Actualiser
+                </button>
+
+                <button id="reset-client-analysis" class="secondary-button">
+                  Réinitialiser
+                </button>
+              </div>
+
+            </div>
+
+            <!-- INDICATEURS -->
+
+            <div class="stats-grid client-analysis-kpis">
+
+              <article class="stat-card">
+                <span>Total clients distincts</span>
+                <strong id="analysis-total-clients">0</strong>
+              </article>
+
+              <article class="stat-card">
+                <span>Total visites effectuées</span>
+                <strong id="analysis-total-visits">0</strong>
+              </article>
+
+              <article class="stat-card">
+                <span>Nombre de bons d'achat</span>
+                <strong id="analysis-total-bons">0</strong>
+              </article>
+
+              <article class="stat-card">
+                <span>Montant total des bons</span>
+                <strong id="analysis-total-amount">0 DA</strong>
+              </article>
+
+            </div>
+
+            <!-- GRAPHIQUES -->
+
+            <div class="client-analysis-charts">
+
+              <article class="stat-card">
+                <h3>Répartition des clients par type</h3>
+                <div id="analysis-clients-chart" class="analysis-chart"></div>
+                <div id="analysis-clients-legend" class="analysis-legend"></div>
+              </article>
+
+              <article class="stat-card">
+                <h3>Répartition des visites par type</h3>
+                <div id="analysis-visits-chart" class="analysis-chart"></div>
+                <div id="analysis-visits-legend" class="analysis-legend"></div>
+              </article>
+
+              <article class="stat-card">
+                <h3>Montant des bons d'achat par type</h3>
+                <div id="analysis-amount-chart" class="analysis-chart"></div>
+                <div id="analysis-amount-legend" class="analysis-legend"></div>
+              </article>
+
+            </div>
+
+            <!-- TABLEAU RÉCAPITULATIF -->
+
+            <div class="section-toolbar" style="margin-top:30px;">
+              <div>
+                <h2>Tableau récapitulatif par type de client</h2>
+                <p id="analysis-summary">0 type de client</p>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type de client</th>
+                    <th>Nombre de clients</th>
+                    <th>Nombre de visites</th>
+                    <th>Nombre de bons d'achat</th>
+                    <th>Montant total (DA)</th>
+                  </tr>
+                </thead>
+
+                <tbody id="analysis-table">
+                  <tr>
+                    <td colspan="5">En attente de chargement...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </section>
 
       </section>
 
@@ -829,7 +984,7 @@
   <!-- ================= SCRIPTS ================= -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script type="module" src="./app.js"></script>
 
 </body>
