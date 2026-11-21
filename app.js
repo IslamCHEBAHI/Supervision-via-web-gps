@@ -53,6 +53,7 @@ let mapExpanded = false;
 let map = null;
 let clientRows = [];
 let reportRows = [];
+let clientAnalysisRows = [];
 
 const ALGER_CIRCONSCRIPTIONS = [
   ["Zéralda", "alger_ouest", [
@@ -179,10 +180,7 @@ const ZONING_WILAYAS = [
   { code: "44", nom: "Aïn Defla" },
   { code: "35", nom: "Boumerdès" },
   { code: "09", nom: "Blida" },
-  { code: "42", nom: "Tipaza" },
-  { code: "31", nom: "Oran" },
-  { code: "19", nom: "Sétif" },
-  { code: "25", nom: "Constantine" }
+  { code: "42", nom: "Tipaza" }
 ];
 
 let selectedZoningWilaya = null;
@@ -584,7 +582,16 @@ async function saveZoningUsers() {
 
 async function saveZoningCommunes() {
 
-  if (zoningCommunes.length !== 276) {
+  const expectedCommunesCount =
+    ALGER_COMMUNES.length +
+    zoningAllCommunes.filter(commune =>
+      commune.wilayaCode !== "16" &&
+      ZONING_WILAYAS.some(
+        wilaya => wilaya.code === commune.wilayaCode
+      )
+    ).length;
+
+  if (zoningCommunes.length !== expectedCommunesCount) {
     showToast("Erreur : liste des communes incomplète.");
     return;
   }
@@ -611,7 +618,7 @@ async function saveZoningCommunes() {
     renderZoningZoneStats();
 
     els.zoningStatus.textContent =
-      "Les affectations des 8 wilayas ont été enregistrées.";
+      "Les affectations des 5 wilayas ont été enregistrées.";
 
     showToast("Zoning enregistré avec succès.");
 
@@ -732,7 +739,7 @@ function zoningWilayaCode(value) {
 
   // Compatibilité avec les anciens rapports sans wilaya
   if (!key) {
-    return "16";
+    return "";
   }
 
   return "";
@@ -807,6 +814,704 @@ function zoningGetDateValue(value) {
 
 
 // =====================================================
+// ANALYSE CLIENTÈLE — CHARGEMENT FIREBASE
+// =====================================================
+
+const ANALYSIS_CLIENT_TYPES = [
+  "Dentiste généraliste",
+  "Spécialiste en orthodontie",
+  "Spécialiste en pathologie / parodontologie",
+  "Spécialiste en endodontie",
+  "Spécialiste en prothèse",
+  "Laboratoire de prothèse",
+  "Clinique dentaire / laboratoire",
+  "Clinique dentaire",
+  "Comptoir dentaire"
+];
+
+async function loadClientAnalysis() {
+  try {
+    els.analysisTable.innerHTML =
+      '<tr><td colspan="5">Chargement des données...</td></tr>';
+
+    const snapshot = await getDocs(
+      query(
+        collection(db, "daily_reports"),
+        limit(1000)
+      )
+    );
+
+    clientAnalysisRows = [];
+
+    snapshot.docs.forEach((document) => {
+      const data = document.data();
+
+      const reportDate =
+        data.reportDate ?? data.createdAt ?? null;
+
+      const visits =
+        Array.isArray(data.visits) && data.visits.length
+          ? data.visits
+          : [data];
+
+      visits.forEach((visit, index) => {
+        const clientName = String(
+          visit.clientName ?? data.clientName ?? ""
+        ).trim();
+
+        const clientType = String(
+          visit.clientType ?? data.clientType ?? ""
+        ).trim();
+
+        if (!clientName || !clientType) return;
+
+        const noVisit =
+          visit.noVisit === true ||
+          visit.clientSource === "no_visit";
+
+        const bonAchat = zoningIsBonAchat(
+          visit.bonAchat ?? data.bonAchat
+        );
+
+        const totalBonAchat = zoningParseAmount(
+          visit.totalBonAchat ?? data.totalBonAchat
+        );
+
+        clientAnalysisRows.push({
+          id: document.id,
+          visitNumber: index + 1,
+          username: String(data.username ?? ""),
+          clientName,
+          clientType,
+          phone: String(visit.phone ?? data.phone ?? ""),
+          reportDate,
+          dateValue: zoningGetDateValue(reportDate),
+          noVisit,
+          bonAchat,
+          totalBonAchat
+        });
+      });
+    });
+
+    // Remplir le filtre utilisateur
+    const selectedUser = els.analysisUserFilter.value;
+
+    els.analysisUserFilter.innerHTML =
+      '<option value="">Tous les utilisateurs</option>';
+
+    users.forEach((user) => {
+      const username = user.username ?? user.id;
+      const option = document.createElement("option");
+
+      option.value = username;
+      option.textContent = userLabel(user);
+
+      els.analysisUserFilter.append(option);
+    });
+
+    els.analysisUserFilter.value = selectedUser;
+
+    // Remplir le filtre par type de client
+    const selectedType = els.analysisTypeFilter.value;
+
+    els.analysisTypeFilter.innerHTML =
+      '<option value="">Tous les types de clients</option>';
+
+    ANALYSIS_CLIENT_TYPES.forEach((type) => {
+      const option = document.createElement("option");
+
+      option.value = type;
+      option.textContent = type;
+
+      els.analysisTypeFilter.append(option);
+    });
+
+    els.analysisTypeFilter.value = selectedType;
+
+    renderClientAnalysis();
+
+  } catch (error) {
+    console.error("Erreur Analyse clientèle :", error);
+
+    els.analysisTable.innerHTML =
+      `<tr><td colspan="5">Erreur Firebase : ${escapeHtml(error.message)}</td></tr>`;
+
+    showToast("Erreur de chargement de l'analyse clientèle");
+  }
+}
+
+
+// =====================================================
+// ANALYSE CLIENTÈLE — FILTRES ET CALCULS
+// =====================================================
+
+function renderClientAnalysis() {
+
+  const userFilter = els.analysisUserFilter.value;
+  const typeFilter = els.analysisTypeFilter.value;
+
+  const dateFrom = els.analysisDateFrom.value;
+  const dateTo = els.analysisDateTo.value;
+
+  const filtered = clientAnalysisRows.filter((item) => {
+
+    const matchesUser =
+      !userFilter || item.username === userFilter;
+
+    const matchesType =
+      !typeFilter || item.clientType === typeFilter;
+
+    const matchesDateFrom =
+      !dateFrom || item.dateValue >= dateFrom;
+
+    const matchesDateTo =
+      !dateTo || item.dateValue <= dateTo;
+
+    return (
+      matchesUser &&
+      matchesType &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
+  });
+
+  // Clients distincts
+  const uniqueClients = new Map();
+
+  filtered.forEach((item) => {
+
+    const name = normalizeClientSearch(item.clientName);
+    const phone = String(item.phone || "").trim();
+
+    const key = phone
+      ? `${name}|${phone}`
+      : `${name}|${normalizeClientSearch(item.clientType)}`;
+
+    if (!uniqueClients.has(key)) {
+      uniqueClients.set(key, item);
+    }
+  });
+
+  // Visites, bons et montants
+  const totalVisits = filtered.filter(
+    item => !item.noVisit
+  ).length;
+
+  const bons = filtered.filter(
+    item => item.bonAchat
+  );
+
+  const totalAmount = bons.reduce(
+    (total, item) => total + item.totalBonAchat,
+    0
+  );
+
+  // Actualiser les indicateurs
+  els.analysisTotalClients.textContent =
+    uniqueClients.size.toLocaleString("fr-FR");
+
+  els.analysisTotalVisits.textContent =
+    totalVisits.toLocaleString("fr-FR");
+
+  els.analysisTotalBons.textContent =
+    bons.length.toLocaleString("fr-FR");
+
+  els.analysisTotalAmount.textContent =
+    new Intl.NumberFormat("fr-FR", {
+      maximumFractionDigits: 2
+    }).format(totalAmount) + " DA";
+
+  // Regroupement par type de client
+  const grouped = {};
+
+  ANALYSIS_CLIENT_TYPES.forEach((type) => {
+    grouped[type] = {
+      clients: new Set(),
+      visits: 0,
+      bons: 0,
+      amount: 0
+    };
+  });
+
+  filtered.forEach((item) => {
+
+    if (!grouped[item.clientType]) {
+      grouped[item.clientType] = {
+        clients: new Set(),
+        visits: 0,
+        bons: 0,
+        amount: 0
+      };
+    }
+
+    const group = grouped[item.clientType];
+
+    const name = normalizeClientSearch(item.clientName);
+    const phone = String(item.phone || "").trim();
+
+    const clientKey = phone
+      ? `${name}|${phone}`
+      : `${name}|${normalizeClientSearch(item.clientType)}`;
+
+    group.clients.add(clientKey);
+
+    // Compter uniquement les visites réellement effectuées
+    if (!item.noVisit) {
+      group.visits++;
+    }
+
+    // Comptabiliser les bons d'achat même pour NO VISITE
+    if (item.bonAchat) {
+      group.bons++;
+      group.amount += item.totalBonAchat;
+    }
+  });
+
+  // Construire le tableau
+  const rows = Object.entries(grouped)
+    .filter(([type, group]) =>
+      group.clients.size > 0
+    );
+
+  els.analysisTable.innerHTML = rows.length
+    ? rows.map(([type, group]) => `
+        <tr>
+          <td>${escapeHtml(type)}</td>
+          <td>${group.clients.size}</td>
+          <td>${group.visits}</td>
+          <td>${group.bons}</td>
+          <td>
+            ${new Intl.NumberFormat("fr-FR", {
+              maximumFractionDigits: 2
+            }).format(group.amount)} DA
+          </td>
+        </tr>
+      `).join("")
+    : '<tr><td colspan="5">Aucun résultat pour ces filtres.</td></tr>';
+
+  els.analysisSummary.textContent =
+    `${rows.length} type(s) de client trouvé(s)`;
+  // Générer les trois graphiques
+  renderAnalysisDonut(
+    els.analysisClientsChart,
+    els.analysisClientsLegend,
+    rows.map(([type, group]) => ({
+      label: type,
+      value: group.clients.size
+    }))
+  );
+
+  renderAnalysisDonut(
+    els.analysisVisitsChart,
+    els.analysisVisitsLegend,
+    rows.map(([type, group]) => ({
+      label: type,
+      value: group.visits
+    }))
+  );
+
+  renderAnalysisDonut(
+    els.analysisAmountChart,
+    els.analysisAmountLegend,
+    rows.map(([type, group]) => ({
+      label: type,
+      value: group.amount
+    }))
+  );
+
+}
+
+function renderAnalysisDonut(container, legend, items) {
+  if (!container || !legend) return;
+
+  const colors = [
+    "#3984D6",
+    "#16A085",
+    "#D69B32",
+    "#9865CE",
+    "#E76F51",
+    "#48A9A6",
+    "#D65DB1",
+    "#78909C",
+    "#8BC34A"
+  ];
+
+  const validItems = items.filter(
+    item => Number(item.value) > 0
+  );
+
+  const total = validItems.reduce(
+    (sum, item) => sum + Number(item.value),
+    0
+  );
+
+  if (!total) {
+    container.innerHTML =
+      '<p class="empty-state">Aucune donnée disponible</p>';
+
+    legend.innerHTML = "";
+    return;
+  }
+
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+
+  let offset = 0;
+
+  const circles = validItems.map((item, index) => {
+    const value = Number(item.value);
+    const length = circumference * value / total;
+    const color = colors[index % colors.length];
+
+    const circle = `
+      <circle
+        cx="60"
+        cy="60"
+        r="${radius}"
+        fill="none"
+        stroke="${color}"
+        stroke-width="17"
+        stroke-dasharray="${length} ${circumference - length}"
+        stroke-dashoffset="${-offset}"
+      />
+    `;
+
+    offset += length;
+
+    return circle;
+  }).join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 120 120"
+         role="img"
+         aria-label="Graphique circulaire">
+      <g transform="rotate(-90 60 60)">
+        ${circles}
+      </g>
+
+      <text x="60" y="56"
+            text-anchor="middle"
+            font-size="11"
+            font-weight="bold"
+            fill="currentColor">
+        ${new Intl.NumberFormat("fr-FR", {
+          maximumFractionDigits: 2
+        }).format(total)} DA
+      </text>
+
+      <text x="60" y="70"
+            text-anchor="middle"
+            font-size="8"
+            fill="currentColor">
+        Total
+      </text>
+    </svg>
+  `;
+
+  legend.innerHTML = validItems.map((item, index) => {
+    const value = Number(item.value);
+    const percentage = value / total * 100;
+    const color = colors[index % colors.length];
+
+    return `
+      <div class="analysis-legend-item">
+        <span class="analysis-legend-label">
+          <span
+            class="analysis-legend-color"
+            style="background:${color}">
+          </span>
+
+          ${escapeHtml(item.label)}
+        </span>
+
+        <strong>
+          ${new Intl.NumberFormat("fr-FR", {
+            maximumFractionDigits: 1
+          }).format(percentage)} %
+        </strong>
+      </div>
+    `;
+  }).join("");
+}
+
+function exportClientAnalysisPdf() {
+
+  const userLabel =
+    els.analysisUserFilter.selectedOptions[0]?.textContent ||
+    "Tous les utilisateurs";
+
+  const typeLabel =
+    els.analysisTypeFilter.selectedOptions[0]?.textContent ||
+    "Tous les types";
+
+  const dateFrom = els.analysisDateFrom.value || "Non définie";
+  const dateTo = els.analysisDateTo.value || "Non définie";
+
+  const dateText = `
+    Du ${escapeHtml(dateFrom)}
+    au ${escapeHtml(dateTo)}
+  `;
+
+  const charts = [
+    {
+      title: "Répartition des clients par type",
+      chart: els.analysisClientsChart.innerHTML,
+      legend: els.analysisClientsLegend.innerHTML
+    },
+    {
+      title: "Répartition des visites par type",
+      chart: els.analysisVisitsChart.innerHTML,
+      legend: els.analysisVisitsLegend.innerHTML
+    },
+    {
+      title: "Montant des bons d'achat par type",
+      chart: els.analysisAmountChart.innerHTML,
+      legend: els.analysisAmountLegend.innerHTML
+    }
+  ];
+
+  const chartsHtml = charts.map(item => `
+    <div class="chart-card">
+      <h3>${item.title}</h3>
+      <div class="chart">${item.chart}</div>
+      <div class="legend">${item.legend}</div>
+    </div>
+  `).join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+
+      <title>Analyse clientèle</title>
+
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          padding: 25px;
+          color: #263238;
+        }
+
+        h1 {
+          text-align: center;
+          color: #176B68;
+          margin-bottom: 8px;
+        }
+
+        .subtitle {
+          text-align: center;
+          color: #666;
+          margin-bottom: 25px;
+        }
+
+        .filters {
+          padding: 15px;
+          background: #f1f5f9;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          line-height: 2;
+        }
+
+        .kpis {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin-bottom: 25px;
+        }
+
+        .kpi {
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          padding: 15px;
+          text-align: center;
+        }
+
+        .kpi strong {
+          display: block;
+          font-size: 21px;
+          color: #176B68;
+          margin-top: 8px;
+        }
+
+        .charts {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 15px;
+          margin-bottom: 25px;
+        }
+
+        .chart-card {
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          padding: 12px;
+          text-align: center;
+          break-inside: avoid;
+        }
+
+        .chart-card h3 {
+          font-size: 13px;
+        }
+
+        .chart svg {
+          width: 150px;
+          height: 150px;
+        }
+
+        .legend {
+          text-align: left;
+          font-size: 11px;
+        }
+
+        .analysis-legend-item {
+          display: flex;
+          justify-content: space-between;
+          margin: 6px 0;
+        }
+
+        .analysis-legend-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .analysis-legend-color {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
+        }
+
+        th {
+          background: #176B68;
+          color: white;
+        }
+
+        th, td {
+          border: 1px solid #ddd;
+          padding: 9px;
+          text-align: center;
+        }
+
+        h2 {
+          color: #176B68;
+          margin-top: 25px;
+        }
+
+        @media print {
+          body {
+            padding: 10px;
+          }
+
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      </style>
+    </head>
+
+    <body>
+
+      <h1>ANALYSE CLIENTÈLE</h1>
+
+      <p class="subtitle">
+        Rapport statistique de la clientèle commerciale
+      </p>
+
+      <div class="filters">
+        <strong>Utilisateur :</strong>
+        ${escapeHtml(userLabel)}<br>
+
+        <strong>Type de client :</strong>
+        ${escapeHtml(typeLabel)}<br>
+
+        <strong>Période :</strong>
+        ${dateText}
+      </div>
+
+      <div class="kpis">
+
+        <div class="kpi">
+          Clients distincts
+          <strong>${els.analysisTotalClients.textContent}</strong>
+        </div>
+
+        <div class="kpi">
+          Total visites
+          <strong>${els.analysisTotalVisits.textContent}</strong>
+        </div>
+
+        <div class="kpi">
+          Bons d'achat
+          <strong>${els.analysisTotalBons.textContent}</strong>
+        </div>
+
+        <div class="kpi">
+          Montant total
+          <strong>${els.analysisTotalAmount.textContent}</strong>
+        </div>
+
+      </div>
+
+      <h2>Graphiques statistiques</h2>
+
+      <div class="charts">
+        ${chartsHtml}
+      </div>
+
+      <h2>Tableau récapitulatif</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Type de client</th>
+            <th>Clients</th>
+            <th>Visites</th>
+            <th>Bons d'achat</th>
+            <th>Montant (DA)</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${els.analysisTable.innerHTML}
+        </tbody>
+      </table>
+
+    </body>
+    </html>
+  `;
+
+  const win = window.open(
+    "",
+    "_blank",
+    "width=1200,height=900"
+  );
+
+  if (!win) {
+    showToast("Autorise les fenêtres pop-up pour exporter le PDF");
+    return;
+  }
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+
+  win.onload = () => {
+    win.focus();
+    win.print();
+  };
+}
+
+
+
+// =====================================================
 // FILTRE DES UTILISATEURS
 // =====================================================
 
@@ -872,7 +1577,6 @@ async function loadZoningReports() {
         : [data];
 
     visits.forEach((visit, index) => {
-
       const wilaya = String(
         visit.wilaya ?? data.wilaya ?? ""
       ).trim();
@@ -881,11 +1585,24 @@ async function loadZoningReports() {
         visit.commune ?? data.commune ?? ""
       ).trim();
 
-      const wilayaCode = zoningWilayaCode(wilaya);
+      const communeKey = zoningCommuneKey(communeName);
+
+      let wilayaCode = zoningWilayaCode(wilaya);
+
+      // Anciennes visites sans wilaya : vérifier si la commune
+      // appartient réellement au référentiel d'Alger.
+      if (!wilayaCode && !wilaya) {
+        const isAlgerCommune = ALGER_COMMUNES.some(
+          item => zoningCommuneKey(item.commune) === communeKey
+        );
+
+        if (isAlgerCommune) {
+          wilayaCode = "16";
+        }
+      }
 
       if (!wilayaCode) return;
 
-      const communeKey = zoningCommuneKey(communeName);
 
       // Recherche dans le zoning commercial existant
       const communeZoning = zoningCommunes.find(
@@ -903,16 +1620,6 @@ async function loadZoningReports() {
             zoningCommuneKey(item.communeArabic) === communeKey
           )
       );
-
-      // Vérifier si la wilaya fait partie du zoning actuel
-      const wilayaDansZoning = ZONING_WILAYAS.some(
-        item => item.code === wilayaCode
-      );
-
-      // Conserver le comportement initial pour les wilayas zonées
-      if (!communeZoning && wilayaDansZoning) {
-        return;
-      }
 
       // Pour les autres wilayas, conserver la visite
       const commune =
@@ -1011,83 +1718,116 @@ async function loadZoningReports() {
 // CALCUL ET AFFICHAGE DES RESULTATS
 // =====================================================
 
-function ensureHorsZoningFilterOption() {
+function zoningGetReportZoneId(report) {
 
-  const filter = els.zoningZoneFilter;
+  const wilayaCode = String(
+    report.wilayaCode || ""
+  ).padStart(2, "0");
 
-  if (!filter) return;
+  // Oran, Sétif et Constantine sont hors zoning
+  if (["31", "19", "25"].includes(wilayaCode)) {
+    return "__hors_zoning__";
+  }
 
-  const exists = [...filter.options].some(
-    option => option.value === "__hors_zoning__"
+  const commune = zoningCommunes.find(
+    item => item.code === report.communeCode
   );
 
-  if (exists) return;
+  if (commune) {
+    return commune.zoneId ||
+           commune.defaultZone ||
+           "__non_affectee__";
+  }
 
-  const option = document.createElement("option");
+  const wilayaDansZoning = ZONING_WILAYAS.some(
+    item => item.code === wilayaCode
+  );
 
-  option.value = "__hors_zoning__";
-  option.textContent = "Hors zoning";
-
-  filter.appendChild(option);
+  return wilayaDansZoning
+    ? "__non_affectee__"
+    : "__hors_zoning__";
 }
+
+
+
+
+function ensureHorsZoningFilterOption() {
+  const filter = els.zoningZoneFilter;
+  if (!filter) return;
+
+  const options = [
+    {
+      value: "__hors_zoning__",
+      label: "Hors zoning"
+    },
+    {
+      value: "__non_affectee__",
+      label: "Communes non affectées"
+    }
+  ];
+
+  options.forEach(item => {
+    const exists = [...filter.options].some(
+      option => option.value === item.value
+    );
+
+    if (!exists) {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      filter.appendChild(option);
+    }
+  });
+}
+
 
 function renderZoningResults() {
   if (!els.zoningReportsTable) return;
 
-  const zoneFilter = els.zoningZoneFilter.value;
-  const userFilter = els.zoningUserFilter.value;
-  const dateFilter = els.zoningDateFilter.value;
+  const zoneFilter = els.zoningZoneFilter?.value || "";
+  const userFilter = els.zoningUserFilter?.value || "";
+  const dateFrom = els.zoningDateFrom?.value || "";
+  const dateTo = els.zoningDateTo?.value || "";
+
   const communeSearch = zoningCommuneKey(
     els.zoningCommuneFilter?.value.trim() || ""
   );
-  console.log("=== DIAGNOSTIC ZONING ===");
 
-  console.log("Nombre de communes :", zoningCommunes.length);
+  // Appliquer les filtres indépendamment
+  const filtered = zoningReportRows.filter(report => {
 
-  console.log("Nombre de rapports chargés :", zoningReportRows.length);
+    const reportZone = zoningGetReportZoneId(report);
 
-  console.log("Zone sélectionnée :", zoneFilter);
+    const matchesZone =
+      !zoneFilter || reportZone === zoneFilter;
 
-  console.log("Utilisateur sélectionné :", userFilter);
+    const matchesUser =
+      !userFilter ||
+      String(report.username || "").trim().toLowerCase() ===
+      String(userFilter).trim().toLowerCase();
 
-  console.log("Date sélectionnée :", dateFilter);
+    const matchesDate =
+      (!dateFrom || report.dateValue >= dateFrom) &&
+      (!dateTo || report.dateValue <= dateTo);
 
-  console.table(
-    zoningReportRows.slice(0, 10).map(report => {
-      const commune = zoningCommunes.find(
-        c => c.code === report.communeCode
-      );
-
-      return {
-        utilisateur: report.username,
-        commune: report.commune,
-        zone: commune?.zoneId || "Non affectée",
-        date: report.dateValue
-      };
-    })
-  );
-  const filtered = zoningReportRows.filter((report) => {
     const matchesCommune =
       communeSearch.length < 2 ||
       (
-        String(report.wilayaCode ?? "") === "16" &&
+        String(report.wilayaCode || "") === "16" &&
         zoningCommuneKey(report.commune).startsWith(communeSearch)
       );
 
-    return (!zoneFilter || zoneId === zoneFilter)
-      && (!userFilter || String(report.username ?? "").trim().toLowerCase() ===
-      String(userFilter).trim().toLowerCase())
-      && (!dateFilter || report.dateValue === dateFilter)
-      && matchesCommune;
+    return (
+      matchesZone &&
+      matchesUser &&
+      matchesDate &&
+      matchesCommune
+    );
   });
-  // Afficher uniquement les visites avec bon d'achat
-  const filteredWithBonAchat = filtered.filter(
-    report => report.bonAchat === true
-  );
 
-  // Clients distincts
+  // Calculer les clients distincts
   const distinctClients = new Set(
-    filtered.map((report) => {
+    filtered.map(report => {
       const client = normalizeZoningText(report.clientName);
 
       return client
@@ -1098,7 +1838,7 @@ function renderZoningResults() {
 
   // Nombre de visites avec bon d'achat
   const bonsCount = filtered.filter(
-    (report) => report.bonAchat
+    report => report.bonAchat
   ).length;
 
   // Montant total des bons d'achat
@@ -1112,6 +1852,7 @@ function renderZoningResults() {
     maximumFractionDigits: 2
   }).format(bonsAmount);
 
+  // Actualiser les indicateurs
   els.zoningKpiClients.textContent = distinctClients.size;
   els.zoningKpiVisits.textContent = filtered.length;
   els.zoningKpiBonsCount.textContent = bonsCount;
@@ -1120,7 +1861,8 @@ function renderZoningResults() {
   els.zoningResultsSummary.textContent =
     `${filtered.length} visite(s) correspondant aux filtres`;
 
-  if (!filteredWithBonAchat.length) {
+  // Afficher toutes les visites, avec ou sans bon d'achat
+  if (!filtered.length) {
     els.zoningReportsTable.innerHTML = `
       <tr>
         <td colspan="8">
@@ -1131,12 +1873,15 @@ function renderZoningResults() {
     return;
   }
 
-  els.zoningReportsTable.innerHTML = filteredWithBonAchat.map((report) => {
-    const commune = zoningCommunes.find(
-      (item) => item.code === report.communeCode
-    );
+  els.zoningReportsTable.innerHTML = filtered.map(report => {
 
-    const zoneId = commune?.zoneId ?? commune?.defaultZone ?? "";
+    const zoneId = zoningGetReportZoneId(report);
+
+    const zoneLabel =
+      ZONING_ZONES[zoneId] ||
+      (zoneId === "__non_affectee__"
+        ? "Non affectée"
+        : "Hors zoning");
 
     const userName =
       report.userFullName ||
@@ -1144,7 +1889,7 @@ function renderZoningResults() {
 
     const amount = new Intl.NumberFormat("fr-FR", {
       maximumFractionDigits: 2
-    }).format(report.totalBonAchat);
+    }).format(report.totalBonAchat || 0);
 
     const date = zoningGetDate(report.reportDate);
 
@@ -1156,7 +1901,7 @@ function renderZoningResults() {
 
         <td>${escapeHtml(userName)}</td>
 
-        <td>${escapeHtml(ZONING_ZONES[zoneId] ?? "Hors zoning")}</td>
+        <td>${escapeHtml(zoneLabel)}</td>
 
         <td>${escapeHtml(report.clientName)}</td>
 
@@ -1175,6 +1920,7 @@ function renderZoningResults() {
     `;
   }).join("");
 }
+
 
 function zoningUserNameForReport(username) {
   const user = users.find(
@@ -1257,6 +2003,7 @@ const els = {
     clients: document.querySelector("#clients-section"),
     reports: document.querySelector("#reports-section"),
     zoning: document.querySelector("#zoning-section"),
+    clientAnalysis: document.querySelector("#client-analysis-section"),
   },
   totalUsers: document.querySelector("#total-users"),
   onlineUsers: document.querySelector("#online-users"),
@@ -1288,6 +2035,7 @@ const els = {
   pauseRoute: document.querySelector("#pause-route"),
   clientsSummary: document.querySelector("#clients-summary"),
   clientsUserFilter: document.querySelector("#clients-user-filter"),
+  clientsTypeFilter: document.querySelector("#clients-type-filter"),
   clientsNameSearch: document.querySelector("#clients-name-search"),
   clientsTable: document.querySelector("#clients-table"),
   refreshClients: document.querySelector("#refresh-clients"),
@@ -1323,8 +2071,8 @@ zoningUsersTable: document.querySelector("#zoning-users-table"),
 zoningZoneFilter: document.querySelector("#zoning-zone-filter"),
 zoningUserFilter: document.querySelector("#zoning-user-filter"),
 zoningCommuneFilter: document.querySelector("#zoning-commune-filter"),
-zoningDateFilter: document.querySelector("#zoning-date-filter"),
-
+zoningDateFrom: document.querySelector("#zoning-date-from"),
+zoningDateTo: document.querySelector("#zoning-date-to"),
 applyZoningFilters: document.querySelector("#apply-zoning-filters"),
 resetZoningFilters: document.querySelector("#reset-zoning-filters"),
 
@@ -1335,6 +2083,32 @@ zoningKpiBonsAmount: document.querySelector("#zoning-kpi-bons-amount"),
 
 zoningResultsSummary: document.querySelector("#zoning-results-summary"),
 zoningReportsTable: document.querySelector("#zoning-reports-table"),
+// ANALYSE CLIENTÈLE
+
+analysisUserFilter: document.querySelector("#analysis-user-filter"),
+analysisTypeFilter: document.querySelector("#analysis-type-filter"),
+analysisDateFrom: document.querySelector("#analysis-date-from"),
+analysisDateTo: document.querySelector("#analysis-date-to"),
+
+analysisTotalClients: document.querySelector("#analysis-total-clients"),
+analysisTotalVisits: document.querySelector("#analysis-total-visits"),
+analysisTotalBons: document.querySelector("#analysis-total-bons"),
+analysisTotalAmount: document.querySelector("#analysis-total-amount"),
+
+analysisClientsChart: document.querySelector("#analysis-clients-chart"),
+analysisVisitsChart: document.querySelector("#analysis-visits-chart"),
+analysisAmountChart: document.querySelector("#analysis-amount-chart"),
+
+analysisClientsLegend: document.querySelector("#analysis-clients-legend"),
+analysisVisitsLegend: document.querySelector("#analysis-visits-legend"),
+analysisAmountLegend: document.querySelector("#analysis-amount-legend"),
+
+analysisTable: document.querySelector("#analysis-table"),
+analysisSummary: document.querySelector("#analysis-summary"),
+
+refreshClientAnalysis: document.querySelector("#refresh-client-analysis"),
+resetClientAnalysis: document.querySelector("#reset-client-analysis"),
+exportClientAnalysisPdf: document.querySelector("#export-client-analysis-pdf"),
   toast: document.querySelector("#toast"),
 };
 
@@ -1389,6 +2163,10 @@ function setView(view) {
       "Zoning commercial",
       "Répartition territoriale et analyse des performances commerciales."
     ],
+    clientAnalysis: [
+      "Analyse clientèle",
+      "Répartition des clients par type, visites et bons d'achat."
+    ],
   };
   els.pageTitle.textContent = titles[view][0];
   els.pageSubtitle.textContent = titles[view][1];
@@ -1406,6 +2184,9 @@ function setView(view) {
   }
   if (view === "zoning") {
     loadZoningData();
+  }
+  if (view === "clientAnalysis") {
+    loadClientAnalysis();
   }
 }
 
@@ -1570,6 +2351,40 @@ function renderClientsUserFilter() {
   }
 }
 
+
+function renderClientsTypeFilter() {
+  const filter = els.clientsTypeFilter;
+  if (!filter) return;
+
+  const selected = filter.value;
+
+  const types = [
+    "Dentiste généraliste",
+    "Spécialiste en orthodontie",
+    "Spécialiste en pathologie / parodontologie",
+    "Spécialiste en endodontie",
+    "Spécialiste en prothèse",
+    "Laboratoire de prothèse",
+    "Clinique dentaire / laboratoire",
+    "Clinique dentaire",
+    "Comptoir dentaire"
+  ];
+
+  filter.innerHTML =
+    '<option value="">Tous les types de clients</option>';
+
+  types.forEach(type => {
+    const option = document.createElement("option");
+    option.value = type;
+    option.textContent = type;
+    filter.append(option);
+  });
+
+  filter.value = types.includes(selected) ? selected : "";
+}
+
+
+
 function userLabel(user) {
   const username = user.username ?? user.id;
   const fullName = `${user.Firstname ?? ""} ${user.Lastname ?? ""}`.trim();
@@ -1627,6 +2442,7 @@ async function loadAllClients() {
       return bDate - aDate;
     });
     clientRows = rows;
+    renderClientsTypeFilter();
     renderClientsTable(false);
   } catch (error) {
     els.clientsSummary.textContent = "Erreur lecture clients";
@@ -1657,16 +2473,25 @@ function renderClientsTable(isLoading = false) {
   const search = normalizeClientSearch(
     els.clientsNameSearch?.value || ""
   );
+  const selectedType =
+    els.clientsTypeFilter?.value || "";
 
   // Filtrer les clients selon leur nom
-  const visibleClients = clientRows.filter(client =>
-    normalizeClientSearch(client.name).includes(search)
-  );
+  const visibleClients = clientRows.filter(client => {
+    const matchesName = normalizeClientSearch(
+      client.name
+    ).includes(search);
 
+    const matchesType =
+      !selectedType || client.type === selectedType;
+
+    return matchesName && matchesType;
+  });
+
+  
   els.clientsSummary.textContent =
-    search
-      ? `${visibleClients.length} résultat(s) sur ${clientRows.length} client(s)`
-      : `${clientRows.length} client(s)`;
+    `${visibleClients.length} client(s)`;
+
 
   if (!clientRows.length) {
     els.clientsTable.innerHTML =
@@ -1699,18 +2524,47 @@ function renderClientsTable(isLoading = false) {
   });
 }
 
+
 function exportClientsToExcel() {
-  if (!clientRows.length) {
-    showToast("Aucun client a exporter");
+
+  // Récupérer les filtres actuellement sélectionnés
+  const search = normalizeClientSearch(
+    els.clientsNameSearch?.value || ""
+  );
+
+  const selectedType =
+    els.clientsTypeFilter?.value || "";
+
+  // Reprendre exactement les critères du tableau affiché
+  const visibleClients = clientRows.filter(client => {
+
+    const matchesName = normalizeClientSearch(
+      client.name
+    ).includes(search);
+
+    const matchesType =
+      !selectedType || client.type === selectedType;
+
+    return matchesName && matchesType;
+  });
+
+  // Vérifier qu'il existe des clients à exporter
+  if (!visibleClients.length) {
+    showToast("Aucun client à exporter selon les filtres");
     return;
   }
 
-  const rows = clientRows.map((client) => `
+  // Préparer uniquement les clients visibles
+  const rows = visibleClients.map((client) => `
     <tr>
       <td>${escapeHtml(client.name)}</td>
       <td>${escapeHtml(client.type)}</td>
       <td>${escapeHtml(client.userLabel)}</td>
-      <td>${escapeHtml(client.phone || "Non renseigné")}</td>
+      <td style="mso-number-format:'\@';">
+        ${client.phone
+          ? `&#39;${escapeHtml(String(client.phone).trim())}`
+          : "Non renseigné"}
+      </td>
       <td>${client.latitude.toFixed(6)}</td>
       <td>${client.longitude.toFixed(6)}</td>
       <td>${escapeHtml(formatDateTime(client.createdAt))}</td>
@@ -1742,16 +2596,24 @@ function exportClientsToExcel() {
   const blob = new Blob(["\ufeff", html], {
     type: "application/vnd.ms-excel;charset=utf-8",
   });
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
+
   link.href = url;
   link.download = "clients_pointes.xls";
+
   document.body.append(link);
   link.click();
   link.remove();
+
   URL.revokeObjectURL(url);
-  showToast("Fichier Excel telecharge");
+
+  showToast(
+    `${visibleClients.length} client(s) exporté(s) avec succès`
+  );
 }
+
 
 function renderReportsUserFilter() {
   const selected = els.reportsUserFilter.value;
@@ -1874,29 +2736,54 @@ async function loadAllReports() {
         totalBonAchat: data.totalBonAchat,
         observation: data.observation,
       }];
-      return visits.map((visit, index) => ({
-        ...base,
-        visitNumber: index + 1,
-        visitsCount: visits.length,
-        clientName: String(visit.clientName ?? ""),
-        clientType: String(visit.clientType ?? ""),
-        activityType: String(visit.activityType ?? ""),
-        phone: String(visit.phone ?? ""),
-        wilaya: String(visit.wilaya ?? ""),
-        commune: String(visit.commune ?? ""),
-        interestedProducts: String(visit.interestedProducts ?? ""),
-        bonAchat: String(visit.bonAchat ?? ""),
-        gammesAchetees: Array.isArray(visit.gammesAchetees)
-          ? visit.gammesAchetees.map(normalizeGamme)
-          : [],
+      return visits.map((visit, index) => {
+        const activities = Array.isArray(visit.activityTypes)
+          ? visit.activityTypes
+          : String(visit.activityType || "")
+              .split(",")
+              .map(value => value.trim());
 
-        totalBonAchat: Number(
-          String(visit.totalBonAchat ?? 0)
+        const totalRecouvrement = Number(
+          String(visit.totalRecouvrement ?? 0)
             .replace(/\s/g, "")
             .replace(",", ".")
-        ) || 0,
-        observation: String(visit.observation ?? ""),
-      }));
+        ) || 0;
+
+        return {
+          ...base,
+          visitNumber: index + 1,
+          visitsCount: visits.length,
+
+          clientName: String(visit.clientName ?? ""),
+          clientType: String(visit.clientType ?? ""),
+
+          clientSource: String(visit.clientSource ?? ""),
+          noVisit: visit.noVisit === true,
+
+          activityType: activities.join(", "),
+          hasRecouvrement: activities.includes("Recouvrement"),
+          totalRecouvrement,
+
+          phone: String(visit.phone ?? ""),
+          wilaya: String(visit.wilaya ?? ""),
+          commune: String(visit.commune ?? ""),
+
+          interestedProducts: String(visit.interestedProducts ?? ""),
+          bonAchat: String(visit.bonAchat ?? ""),
+
+          gammesAchetees: Array.isArray(visit.gammesAchetees)
+            ? visit.gammesAchetees.map(normalizeGamme)
+            : [],
+
+          totalBonAchat: Number(
+            String(visit.totalBonAchat ?? 0)
+              .replace(/\s/g, "")
+              .replace(",", ".")
+          ) || 0,
+
+          observation: String(visit.observation ?? "")
+        };
+      });
     });
 
     reportRows.sort((a, b) => {
@@ -1956,9 +2843,6 @@ function renderReportsTable(isLoading = false) {
         <td rowspan="${rowSpan}" class="report-shared-cell">
           ${escapeHtml(report.userFullName)}
         </td>
-        <td rowspan="${rowSpan}" class="report-shared-cell">
-          ${escapeHtml(report.username)}
-        </td>
       ` : "";
 
       const actionCell = index === 0 ? `
@@ -1974,7 +2858,16 @@ function renderReportsTable(isLoading = false) {
       row.innerHTML = `
         ${sharedCells}
 
-        <td><strong>${escapeHtml(item.clientName)}</strong></td>
+        <td>
+          ${
+            item.noVisit || item.clientSource === "no_visit"
+              ? `<span class="client-status no-visit">NO VISITE</span>`
+              : item.clientSource === "pointage"
+                ? `<span class="client-status visited">VISITE</span>`
+                : ""
+          }
+          <strong>${escapeHtml(item.clientName)}</strong>
+        </td>
         <td>${escapeHtml(item.clientType)}</td>
         <td>${escapeHtml(item.activityType)}</td>
         <td>${escapeHtml(item.phone)}</td>
@@ -1987,6 +2880,16 @@ function renderReportsTable(isLoading = false) {
 
         <td class="report-visit-content">
           ${renderBonAchatCell(item)}
+        </td>
+        <td class="recouvrement-cell">
+          ${
+            item.hasRecouvrement && item.totalRecouvrement > 0
+              ? `<span class="recouvrement-yes">
+                  Oui — ${new Intl.NumberFormat("fr-FR")
+                    .format(item.totalRecouvrement)} DA
+                </span>`
+              : `<span class="recouvrement-no">Non</span>`
+          }
         </td>
 
         <td class="report-visit-content observation-cell">
@@ -2081,154 +2984,543 @@ function renderPurchaseExport(report) {
 }
 
 
-async function exportReportsToExcel(rows = reportRows, filename = "rapports_journaliers.xls") {
+
+
+async function exportReportsToExcel(
+  rows = reportRows,
+  filename = "rapports_journaliers.xlsx"
+) {
   if (!rows.length) {
-    showToast("Aucun rapport a exporter");
+    showToast("Aucun rapport à exporter");
     return;
   }
 
-  const meta = buildReportMeta(rows);
+  if (typeof window.ExcelJS === "undefined") {
+    showToast("La bibliothèque ExcelJS n'est pas chargée");
+    return;
+  }
 
-  const tableRows = rows.map(report => `
-    <tr>
-      <td>${escapeHtml(report.clientName)}</td>
-      <td>${escapeHtml(report.clientType)}</td>
-      <td>${escapeHtml(report.activityType)}</td>
-      <td>${escapeHtml(report.phone)}</td>
-      <td>${escapeHtml(report.wilaya)}</td>
-      <td>${escapeHtml(report.commune)}</td>
-      <td class="multiline-cell">
-        ${escapeHtml(report.interestedProducts || "")
-          .replace(/\r\n|\r|\n/g, '<br style="mso-data-placement:same-cell;">')}
-      </td>
+  const workbook = new window.ExcelJS.Workbook();
 
-      <td>${renderPurchaseExport(report)}</td>
+  workbook.creator = "Supervisor Web";
+  workbook.subject = "Rapports journaliers";
+  workbook.created = new Date();
 
-      <td class="multiline-cell">
-        ${escapeHtml(report.observation || "")
-          .replace(/\r\n|\r|\n/g, '<br style="mso-data-placement:same-cell;">')}
-      </td>
-    </tr>
-  `).join("");
+  const moneyFormat = '#,##0.00 "DA"';
 
-  const html = `
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body {font-family:Arial;color:#172033}
-        table {
-          border-collapse: collapse;
-          width: 100%;
-          font-size: 11px;
-        }
+  const colors = {
+    navy: "172B4D",
+    blue: "DBEAFE",
+    white: "FFFFFF",
+    border: "CBD5E1",
+    green: "15803D",
+    lightGreen: "DCFCE7",
+    orange: "B45309",
+    lightOrange: "FEF3C7",
+    grey: "64748B",
+    lightGrey: "F1F5F9"
+  };
 
-        th, td {
-          border: 1px solid #cbd5e1;
-          padding: 10px;
-          text-align: center;
-          vertical-align: middle;
-          mso-number-format: General;
-        }
-        
-        .report-info {
-          font-size: 16px;
-          font-weight: bold;
-          text-align: left;
-          padding: 14px;
-          background: #f1f5f9;
-          color: #172b4d;
-        }
+  const formatMoney = value =>
+    Number(value || 0);
 
-        th {
-          background: #172b4d;
-          color: #ffffff;
-          font-weight: bold;
-          text-align: center;
-          vertical-align: middle;
-        }
-        .title {background:#172b4d;color:white;font-size:22px;font-weight:bold}
+  // Regrouper les rapports par date
+  const groupedReports = new Map();
 
-        .multiline-cell {
-          white-space: pre-line;
-          text-align: left;
-          vertical-align: middle;
-          mso-data-placement: same-cell;
-          min-width: 220px;
-          padding: 8px;
-          line-height: 1.6;
-          word-wrap: break-word;
-        }
+  rows.forEach(report => {
+    const dateKey =
+      toDateInputValue(report.reportDate) || "date_inconnue";
 
-      </style>
-    </head>
-    <body>
-      <table>
-        <tr><td colspan="9" class="title">
-          RAPPORT JOURNALIER DE LA TOURNEE COMMERCIALE
-        </td></tr>
-        
-        <tr>
-          <td colspan="9" class="report-info">
-            Utilisateur : ${escapeHtml(meta.userFullName)}
-          </td>
-        </tr>
-        <tr>
-          <td colspan="9" class="report-info">
-            Username : ${escapeHtml(meta.username)}
-          </td>
-        </tr>
-        <tr>
-          <td colspan="9" class="report-info">
-            Téléphone : ${escapeHtml(meta.userPhone)}
-          </td>
-        </tr>
-        <tr>
-          <td colspan="9" class="report-info">
-            Date : ${escapeHtml(meta.reportDate)}
-          </td>
-        </tr>
+    if (!groupedReports.has(dateKey)) {
+      groupedReports.set(dateKey, []);
+    }
 
-        <tr>
-          <th>Client</th>
-          <th>Type client</th>
-          <th>Activité</th>
-          <th>Téléphone</th>
-          <th>Wilaya</th>
-          <th>Commune</th>
-          <th>Produits intéressés</th>
-          <th>Bon d'achat et gammes achetées</th>
-          <th>Observation</th>
-        </tr>
-        ${tableRows}
-      </table>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob(["\ufeff", html], {
-    type: "application/vnd.ms-excel;charset=utf-8"
+    groupedReports.get(dateKey).push(report);
   });
+
+  // Traiter chaque date dans une feuille indépendante
+  for (const [dateKey, reports] of groupedReports) {
+
+    const meta = buildReportMeta(reports);
+
+    const safeDate = dateKey === "date_inconnue"
+      ? "Date inconnue"
+      : formatDateOnly(reports[0].reportDate);
+
+    const sheetName = dateKey
+      .replace(/[\\/?*[\]:]/g, "-")
+      .substring(0, 31);
+
+    const worksheet = workbook.addWorksheet(sheetName);
+
+    // Largeur des colonnes
+    worksheet.columns = [
+      { width: 29 }, // Client
+      { width: 22 }, // Type client
+      { width: 27 }, // Activité
+      { width: 17 }, // Téléphone
+      { width: 17 }, // Wilaya
+      { width: 17 }, // Commune
+      { width: 32 }, // Produits intéressés
+      { width: 15 }, // Bon achat
+      { width: 29 }, // Gamme
+      { width: 12 }, // Achat
+      { width: 19 }, // Total achat
+      { width: 23 }, // Recouvrement
+      { width: 35 }  // Observation
+    ];
+
+    // Titre principal
+    worksheet.mergeCells("A1:M1");
+
+    const title = worksheet.getCell("A1");
+    title.value = "RAPPORT JOURNALIER DE LA TOURNÉE COMMERCIALE";
+    title.font = {
+      name: "Arial",
+      size: 18,
+      bold: true,
+      color: { argb: colors.white }
+    };
+    title.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: colors.navy }
+    };
+    title.alignment = {
+      horizontal: "center",
+      vertical: "middle"
+    };
+    worksheet.getRow(1).height = 38;
+
+    // Informations utilisateur
+    const information = [
+      ["Utilisateur", meta.userFullName],
+      ["Username", meta.username],
+      ["Téléphone", meta.userPhone],
+      ["Date du rapport", safeDate]
+    ];
+
+    information.forEach((item, index) => {
+      const rowNumber = index + 2;
+
+      worksheet.mergeCells(`A${rowNumber}:B${rowNumber}`);
+      worksheet.mergeCells(`C${rowNumber}:M${rowNumber}`);
+
+      const label = worksheet.getCell(`A${rowNumber}`);
+      label.value = item[0];
+      label.font = { bold: true, color: { argb: colors.navy } };
+      label.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: colors.blue }
+      };
+
+      const value = worksheet.getCell(`C${rowNumber}`);
+      value.value = item[1] || "";
+      value.font = { bold: true };
+      value.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: colors.lightGrey }
+      };
+
+      [label, value].forEach(cell => {
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "left"
+        };
+        cell.border = {
+          bottom: { style: "thin", color: { argb: colors.border } }
+        };
+      });
+
+      worksheet.getRow(rowNumber).height = 24;
+    });
+
+    // En-têtes du tableau
+    const headerRow = 7;
+
+    const headers = [
+      "Client",
+      "Type client",
+      "Activité",
+      "Téléphone",
+      "Wilaya",
+      "Commune",
+      "Produits intéressés",
+      "Bon d'achat",
+      "Gamme",
+      "Achat",
+      "TOTAL BON D'ACHAT",
+      "Recouvrement",
+      "Observation"
+    ];
+
+    worksheet.getRow(headerRow).values = headers;
+    worksheet.getRow(headerRow).height = 32;
+
+    worksheet.getRow(headerRow).eachCell(cell => {
+      cell.font = {
+        name: "Arial",
+        bold: true,
+        color: { argb: colors.white },
+        size: 10
+      };
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: colors.navy }
+      };
+
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true
+      };
+
+      cell.border = {
+        top: { style: "medium", color: { argb: colors.navy } },
+        bottom: { style: "medium", color: { argb: colors.navy } },
+        left: { style: "thin", color: { argb: colors.white } },
+        right: { style: "thin", color: { argb: colors.white } }
+      };
+    });
+
+    let currentRow = headerRow + 1;
+
+    let dailyPurchaseTotal = 0;
+    let dailyRecoveryTotal = 0;
+
+    // Une visite = un bloc de gammes détaillées
+    for (const report of reports) {
+
+      const firstRow = currentRow;
+      const lastRow = firstRow + GAMME_ACHAT_OPTIONS.length - 1;
+
+      const clientStatus =
+        report.noVisit || report.clientSource === "no_visit"
+          ? "NO VISITE — "
+          : report.clientSource === "pointage"
+            ? "VISITE — "
+            : "";
+
+      const purchaseDone =
+        String(report.bonAchat || "").trim() === "Oui";
+
+      const purchaseAmount = formatMoney(report.totalBonAchat);
+      const recoveryAmount = formatMoney(report.totalRecouvrement);
+
+      const purchased = new Set(
+        Array.isArray(report.gammesAchetees)
+          ? report.gammesAchetees.map(normalizeGamme)
+          : []
+      );
+
+      dailyPurchaseTotal += purchaseAmount;
+
+      if (report.hasRecouvrement) {
+        dailyRecoveryTotal += recoveryAmount;
+      }
+
+      // Colonnes fusionnées verticalement
+      const mergedColumns = [
+        { col: 1, value: clientStatus + (report.clientName || "") },
+        { col: 2, value: report.clientType || "" },
+        { col: 3, value: report.activityType || "" },
+        { col: 4, value: String(report.phone || "").trim() },
+        { col: 5, value: report.wilaya || "" },
+        { col: 6, value: report.commune || "" },
+        { col: 7, value: report.interestedProducts || "" },
+        { col: 8, value: purchaseDone ? "OUI" : "NON" },
+        { col: 11, value: purchaseAmount },
+        {
+          col: 12,
+          value: report.hasRecouvrement && recoveryAmount > 0
+            ? `Oui — ${new Intl.NumberFormat("fr-FR").format(recoveryAmount)} DA`
+            : "Non"
+        },
+        { col: 13, value: report.observation || "" }
+      ];
+
+      mergedColumns.forEach(item => {
+
+        worksheet.mergeCells(
+          firstRow,
+          item.col,
+          lastRow,
+          item.col
+        );
+
+        const cell = worksheet.getCell(firstRow, item.col);
+        cell.value = item.value;
+
+        if (item.col === 4) {
+          cell.numFmt = "@";
+        }
+
+        cell.alignment = {
+          horizontal: "center",
+          vertical: "middle",
+          wrapText: true
+        };
+
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          color: { argb: colors.navy }
+        };
+
+        if (item.col === 1) {
+          cell.font = {
+            name: "Arial",
+            size: 11,
+            bold: true,
+            color: {
+              argb: clientStatus.startsWith("VISITE")
+                ? colors.green
+                : clientStatus.startsWith("NO VISITE")
+                  ? colors.orange
+                  : colors.navy
+            }
+          };
+        }
+
+        if (item.col === 8) {
+          cell.font = {
+            bold: true,
+            color: {
+              argb: purchaseDone ? colors.green : colors.grey
+            }
+          };
+        }
+
+        if (item.col === 11) {
+          cell.numFmt = moneyFormat;
+          cell.font = {
+            bold: true,
+            color: { argb: colors.green }
+          };
+        }
+
+        if (item.col === 12) {
+          cell.font = {
+            bold: true,
+            color: {
+              argb: report.hasRecouvrement && recoveryAmount > 0
+                ? colors.green
+                : colors.grey
+            }
+          };
+        }
+
+        // Style des cellules fusionnées
+        for (let r = firstRow; r <= lastRow; r++) {
+          const currentCell = worksheet.getCell(r, item.col);
+
+          currentCell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: reports.indexOf(report) % 2 === 0
+                ? colors.white
+                : colors.lightGrey
+            }
+          };
+
+          currentCell.border = {
+            left: { style: "thin", color: { argb: colors.border } },
+            right: { style: "thin", color: { argb: colors.border } },
+            top: r === firstRow
+              ? { style: "thin", color: { argb: colors.border } }
+              : undefined,
+            bottom: r === lastRow
+              ? { style: "thin", color: { argb: colors.border } }
+              : undefined
+          };
+        }
+      });
+
+      // Tableau détaillé des gammes achetées
+      GAMME_ACHAT_OPTIONS.forEach((gamme, index) => {
+
+        const rowNumber = firstRow + index;
+        const isPurchased =
+          purchaseDone && purchased.has(normalizeGamme(gamme));
+
+        const gammeCell = worksheet.getCell(rowNumber, 9);
+        const checkCell = worksheet.getCell(rowNumber, 10);
+
+        gammeCell.value = gamme;
+        checkCell.value = isPurchased ? "✕" : "—";
+
+        [gammeCell, checkCell].forEach(cell => {
+          cell.font = {
+            name: "Arial",
+            size: 10,
+            bold: isPurchased
+          };
+
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: isPurchased ? colors.lightGreen : colors.white
+            }
+          };
+
+          cell.alignment = {
+            horizontal: "center",
+            vertical: "middle",
+            wrapText: true
+          };
+
+          cell.border = {
+            top: { style: "thin", color: { argb: colors.border } },
+            bottom: { style: "thin", color: { argb: colors.border } },
+            left: { style: "thin", color: { argb: colors.border } },
+            right: { style: "thin", color: { argb: colors.border } }
+          };
+        });
+
+        checkCell.font = {
+          name: "Arial",
+          size: 13,
+          bold: true,
+          color: {
+            argb: isPurchased ? colors.green : colors.grey
+          }
+        };
+
+        worksheet.getRow(rowNumber).height = 24;
+      });
+
+      // Séparation entre les clients
+      for (let c = 1; c <= 13; c++) {
+        worksheet.getCell(lastRow, c).border = {
+          ...worksheet.getCell(lastRow, c).border,
+          bottom: {
+            style: "medium",
+            color: { argb: colors.navy }
+          }
+        };
+      }
+
+      currentRow = lastRow + 1;
+    }
+
+    // Totaux journaliers
+    currentRow += 1;
+
+    worksheet.mergeCells(
+      currentRow, 1,
+      currentRow, 10
+    );
+
+    const purchaseLabel = worksheet.getCell(currentRow, 1);
+    purchaseLabel.value = "TOTAL DES BONS D'ACHAT JOURNALIERS";
+    purchaseLabel.font = {
+      bold: true,
+      color: { argb: colors.white }
+    };
+
+    const purchaseTotalCell = worksheet.getCell(currentRow, 11);
+    purchaseTotalCell.value = dailyPurchaseTotal;
+    purchaseTotalCell.numFmt = moneyFormat;
+
+    worksheet.getCell(currentRow, 12).value =
+      "TOTAL RECOUVREMENT JOURNALIER";
+
+    worksheet.getCell(currentRow, 13).value = dailyRecoveryTotal;
+    worksheet.getCell(currentRow, 13).numFmt = moneyFormat;
+
+    for (let c = 1; c <= 13; c++) {
+      const cell = worksheet.getCell(currentRow, c);
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: colors.navy }
+      };
+
+      cell.font = {
+        bold: true,
+        color: { argb: colors.white },
+        size: 10
+      };
+
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true
+      };
+
+      cell.border = {
+        top: { style: "medium", color: { argb: colors.navy } },
+        bottom: { style: "medium", color: { argb: colors.navy } }
+      };
+    }
+
+    worksheet.getRow(currentRow).height = 34;
+
+    // Présentation et impression
+    worksheet.views = [{
+      state: "frozen",
+      ySplit: headerRow,
+      xSplit: 0
+    }];
+
+    worksheet.pageSetup = {
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      paperSize: 9
+    };
+
+    worksheet.pageSetup.margins = {
+      left: 0.25,
+      right: 0.25,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2
+    };
+  }
+
+  // Télécharger le classeur
+  const buffer = await workbook.xlsx.writeBuffer();
+
+  const blob = new Blob(
+    [buffer],
+    {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+  );
 
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
+
   link.href = url;
-  link.download = filename;
+  link.download = filename.replace(/\.xls$/i, ".xlsx");
+
   document.body.append(link);
   link.click();
   link.remove();
+
   URL.revokeObjectURL(url);
 
-  showToast("Fichier Excel telecharge");
-
-  
+  showToast(
+    `${groupedReports.size} feuille(s) Excel exportée(s) avec succès`
+  );
 }
+
 
 
 function exportReportToExcel(reportId) {
   exportReportsToExcel(
     reportRows.filter((report) => report.id === reportId),
-    `rapport_journalier_${reportId}.xls`
+    `rapport_journalier_${reportId}.xlsx`
   );
 }
 
@@ -2939,6 +4231,9 @@ els.pauseRoute.addEventListener("click", toggleRouteAnimation);
 els.refreshClients.addEventListener("click", loadAllClients);
 els.exportClients.addEventListener("click", exportClientsToExcel);
 els.clientsUserFilter.addEventListener("change", loadAllClients);
+els.clientsTypeFilter?.addEventListener("change", () => {
+  renderClientsTable(false);
+});
 els.clientsNameSearch?.addEventListener("input", () => {
   renderClientsTable(false);
 });
@@ -3011,7 +4306,11 @@ els.zoningCommuneFilter?.addEventListener("change", () => {
   renderZoningResults();
 });
 
-els.zoningDateFilter?.addEventListener("change", () => {
+els.zoningDateFrom?.addEventListener("change", () => {
+  renderZoningResults();
+});
+
+els.zoningDateTo?.addEventListener("change", () => {
   renderZoningResults();
 });
 
@@ -3019,7 +4318,8 @@ els.zoningDateFilter?.addEventListener("change", () => {
 els.resetZoningFilters?.addEventListener("click", () => {
   els.zoningZoneFilter.value = "";
   els.zoningUserFilter.value = "";
-  els.zoningDateFilter.value = "";
+  els.zoningDateFrom.value = "";
+  els.zoningDateTo.value = "";
   if (els.zoningCommuneFilter) {
     els.zoningCommuneFilter.value = "";
   }
@@ -3030,4 +4330,40 @@ els.resetZoningFilters?.addEventListener("click", () => {
     datalist.innerHTML = "";
   }
   renderZoningResults();
+});
+
+// ==========================================
+// EVENEMENTS ANALYSE CLIENTÈLE
+// ==========================================
+
+els.analysisUserFilter?.addEventListener("change", () => {
+  renderClientAnalysis();
+});
+
+els.analysisTypeFilter?.addEventListener("change", () => {
+  renderClientAnalysis();
+});
+
+els.analysisDateFrom?.addEventListener("change", () => {
+  renderClientAnalysis();
+});
+
+els.analysisDateTo?.addEventListener("change", () => {
+  renderClientAnalysis();
+});
+
+els.refreshClientAnalysis?.addEventListener("click", () => {
+  loadClientAnalysis();
+});
+
+els.resetClientAnalysis?.addEventListener("click", () => {
+  els.analysisUserFilter.value = "";
+  els.analysisTypeFilter.value = "";
+  els.analysisDateFrom.value = "";
+  els.analysisDateTo.value = "";
+
+  renderClientAnalysis();
+});
+els.exportClientAnalysisPdf?.addEventListener("click", () => {
+  exportClientAnalysisPdf();
 });
